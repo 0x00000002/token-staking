@@ -122,9 +122,9 @@ Total Reward = Base Reward × 1.2
 - Encourages larger stakes
 - Tiered bonus structure
 - Example:
-  - 0-1,000 TKNFF: Base rate
-  - 1,001-10,000 TKNFF: +10% bonus
-  - 10,001+ TKNFF: +25% bonus
+  - 0-1,000 tokens: Base rate
+  - 1,001-10,000 tokens: +10% bonus
+  - 10,001+ tokens: +25% bonus
 
 #### Strategy 4: Early Adopter Bonuses
 
@@ -196,14 +196,14 @@ of checkpoints as automatic "snapshots" that the system takes every time someone
 **Example of How Checkpoints Work:**
 
 ```
-Day 1: Alice stakes 1,000 → Checkpoint created
-Day 5: Bob stakes 2,000 → Checkpoint created
+Day 1: Alice stakes 1,000  → Checkpoint created
+Day 5: Bob stakes 2,000  → Checkpoint created
 Day 10: Alice stakes 500 more → Checkpoint created
 Day 15: Bob unstakes 1,000 → Checkpoint created
 
 Reward Period: Days 1-15
-Alice's average stake: 1,000 for 10 days + 1,500 for 5 days = 1,167 TKNFF
-Bob's average stake: 2,000 for 10 days + 1,000 for 5 days = 1,667 TKNFF
+Alice's average stake: 1,000 for 10 days + 1,500 for 5 days = 1,167
+Bob's average stake: 2,000 for 10 days + 1,000 for 5 days = 1,667
 ```
 
 #### Historical Data Collection
@@ -268,7 +268,7 @@ The checkpoint system already collects all the data that rewards will use:
 
 ### Multi-Token Rewards
 
-#### Primary Rewards (Tokens)
+#### Primary Rewards ( Tokens)
 
 - Main reward currency
 - Directly related to your stake

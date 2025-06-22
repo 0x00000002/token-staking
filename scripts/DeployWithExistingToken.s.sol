@@ -8,25 +8,28 @@ import "../src/StakingVault.sol";
 
 /**
  * @title DeployWithExistingToken
- * @notice Deployment script for existing token deployments (like token)
+ * @notice Deployment script for existing token deployments (like staking token)
  */
 contract DeployWithExistingToken is Script {
     function run() external {
         // Read from environment variables
         address admin = vm.envAddress("ADMIN");
         address manager = vm.envAddress("MANAGER");
+        address multisig = vm.envAddress("MULTISIG");
         address token = vm.envAddress("TOKEN");
 
         require(admin != address(0), "ADMIN not set");
         require(manager != address(0), "MANAGER not set");
+        require(multisig != address(0), "MULTISIG not set");
         require(token != address(0), "TOKEN not set");
 
         vm.startBroadcast();
 
         console.log("Deploying with configuration:");
-        console.log("Admin:   ", admin);
-        console.log("Manager: ", manager);
-        console.log("Token:   ", token);
+        console.log("Admin:    ", admin);
+        console.log("Manager:  ", manager);
+        console.log("Multisig: ", multisig);
+        console.log("Token:    ", token);
 
         // 1. Deploy StakingStorage
         StakingStorage stakingStorage = new StakingStorage(
@@ -41,7 +44,8 @@ contract DeployWithExistingToken is Script {
             IERC20(token),
             address(stakingStorage),
             admin,
-            manager
+            manager,
+            multisig
         );
         console.log("StakingVault deployed at:", address(stakingVault));
 
@@ -83,7 +87,7 @@ contract DeployWithExistingToken is Script {
         console.log("  --num-of-optimizations 200 \\");
         console.log("  --etherscan-api-key $ETHERSCAN_API_KEY \\");
         console.log(
-            '  --constructor-args $(cast abi-encode "constructor(address,address,address,address)" ',
+            '  --constructor-args $(cast abi-encode "constructor(address,address,address,address,address)" ',
             token,
             " ",
             address(stakingStorage),
@@ -91,6 +95,8 @@ contract DeployWithExistingToken is Script {
             admin,
             " ",
             manager,
+            " ",
+            multisig,
             ")"
         );
     }

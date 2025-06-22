@@ -313,15 +313,15 @@ Feature: Stake State Validation
     And no tokens should be transferred
 ```
 
-### TC21: Not Stake Owner (UC12)
+### TC21: Not Stake Owner (UC12) - Covered by TC19
 
 ```gherkin
 Feature: Ownership Validation
   Scenario: User attempts to unstake someone else's stake
-    Given stake belongs to different user
-    When wrong user attempts unstake(stakeId)
-    Then transaction should revert with NotStakeOwner error
-    And error should include caller and actual owner
+    Given stakeId belongs to userB
+    When userA attempts to call unstake(stakeId)
+    Then the transaction should revert with StakeNotFound error
+    And This is because the design of StakingStorage uses `msg.sender` to look up stakes, so the stakeId is not found for the caller. This scenario is covered by TC19.
     And no tokens should be transferred
 ```
 
@@ -479,12 +479,6 @@ Feature: Numeric Edge Cases
     When operations are performed
     Then calculations should not overflow
     And state should be updated correctly
-
-  Scenario: Maximum uint16 time lock
-    Given user stakes with maximum uint16 days lock
-    When time calculations are performed
-    Then no overflow should occur
-    And maturity calculation should be correct
 ```
 
 ### TC31: Storage Efficiency

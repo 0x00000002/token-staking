@@ -27,6 +27,8 @@ contract StakingVault is
     bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
     bytes32 public constant CLAIM_CONTRACT_ROLE =
         keccak256("CLAIM_CONTRACT_ROLE");
+    bytes32 public constant CONTROLLER_ROLE = keccak256("CONTROLLER_ROLE");
+    bytes32 public constant MULTISIG_ROLE = keccak256("MULTISIG_ROLE");
 
     // Immutable references
     IStakingStorage public immutable stakingStorage;
@@ -48,10 +50,16 @@ contract StakingVault is
         uint128 amount
     );
 
+    event EmergencyRecover(address token, address to, uint256 amount);
+
     // Errors
     error InvalidAmount();
     error StakeNotFound(address staker, bytes32 stakeId);
-    error StakeNotMatured(bytes32 stakeId, uint16 matureDay, uint16 currentDay);
+    error StakeNotMatured(
+        bytes32 stakeId,
+        uint256 matureDay,
+        uint16 currentDay
+    );
     error StakeAlreadyUnstaked(bytes32 stakeId);
     error NotStakeOwner(address caller, address owner);
 
@@ -63,6 +71,8 @@ contract StakingVault is
     ) {
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
         _grantRole(MANAGER_ROLE, _manager);
+        _grantRole(CONTROLLER_ROLE, _admin);
+        _grantRole(MULTISIG_ROLE, _admin);
 
         token = _token;
         stakingStorage = IStakingStorage(_storage);
@@ -117,14 +127,14 @@ contract StakingVault is
 
         // Check maturity
         uint16 currentDay = _getCurrentDay();
-        uint16 matureDay = _stake.stakeDay + _stake.daysLock;
+        uint256 matureDay = uint256(_stake.stakeDay) + _stake.daysLock;
         require(
             currentDay >= matureDay,
             StakeNotMatured(stakeId, matureDay, currentDay)
         );
 
         // Remove stake from storage
-        stakingStorage.removeStake(stakeId);
+        stakingStorage.removeStake(caller, stakeId);
 
         // Transfer tokens back
         token.safeTransfer(caller, _stake.amount);
@@ -186,8 +196,10 @@ contract StakingVault is
     function emergencyRecover(
         IERC20 token_,
         uint256 amount
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    ) external onlyRole(MULTISIG_ROLE) {
+        require(token_ != token, "Cannot recover staking token");
         token_.safeTransfer(msg.sender, amount);
+        emit EmergencyRecover(address(token_), msg.sender, amount);
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -203,7 +215,7 @@ contract StakingVault is
             keccak256(
                 abi.encode(
                     staker,
-                    stakingStorage.getStakerInfo(staker).stakesCount
+                    stakingStorage.getStakerInfo(staker).stakesCounter
                 )
             );
     }

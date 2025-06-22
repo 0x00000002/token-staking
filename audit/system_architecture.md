@@ -69,32 +69,11 @@ We implement a custom checkpoint system optimized for our use case:
 4. **Historical preservation**: Stakes maintain complete history even after unstaking
 5. **Efficient Queries**: Optimized data structures for large datasets with pagination support
 
-#### Comprehensive Query Functions for Reward Calculations
-
-The system provides foundational data access optimized for reward calculations:
-
-**Core Data Access:**
-
-- `getStake(staker, stakeId)` - Complete stake information including claim origin
-- `getStakerInfo(staker)` - Staker statistics and current totals
-- `isActiveStake(staker, stakeId)` - Quick active status check
-
-**Historical Balance Queries:**
-
-- `getStakerBalance(staker)` - Current staked balance
-- `getStakerBalanceAt(staker, targetDay)` - Historical balance at specific day
-- `batchGetStakerBalances(stakers[], targetDay)` - Gas-efficient batch historical queries
-
-**Global Statistics:**
-
-- `getCurrentTotalStaked()` - Real-time total staked amount
-- `getDailySnapshot(day)` - Historical daily network statistics
-- `getStakersPaginated(offset, limit)` - Paginated access to all stakers
-- `getTotalStakersCount()` - Total unique stakers count
+The specific query functions are detailed in the [Contract Specifications](../docs/contract_specifications.md).
 
 ### Pause Functionality
 
-Implemented pausability as an emergency control measure. Only MANAGER_ROLE can pause/unpause, allowing us to quickly stop all staking operations if security issues arise.
+Implemented pausability as an emergency control measure. Only `MANAGER_ROLE` can pause/unpause, allowing us to quickly stop all staking operations if security issues arise.
 
 ### Areas of Concern
 
@@ -250,3 +229,27 @@ These contracts are **not upgradeable** by design for security reasons. Any chan
 - **Integration Tests**: Full vault-bookkeeper integration
 - **Historical Data Tests**: Checkpoint functionality verification
 - **Batch Operation Tests**: Multi-stake/unstake scenarios
+
+## Staker Enumeration and Access Control
+
+- **Staker Enumeration**: The contract uses OpenZeppelin's `EnumerableSet` library to store the unique list of all stakers. This provides a gas-efficient mechanism for adding new stakers (`O(1)` complexity) and allows for paginated enumeration of all stakers, ensuring predictable and scalable performance.
+- **Access Control**: Utilizes OpenZeppelin's `AccessControl` for role-based permissions. Key roles include:
+  - `DEFAULT_ADMIN_ROLE`: For core administrative tasks and role management.
+  - `MANAGER_ROLE`: For operational tasks like pausing/unpausing.
+  - `MULTISIG_ROLE`: A dedicated, highly-secured role intended for a multisig wallet, with the sole ability to call the `emergencyRecover` function.
+
+### Data Structures
+
+- **Stakes**: `mapping(address => mapping(bytes32 => Stake))`
+- **Daily Snapshots**: `mapping(uint16 => DailySnapshot)`
+- **All Stakers**: `EnumerableSet.AddressSet` for efficient, unique storage and enumeration.
+
+## Security Analysis
+
+- **Centralization Risk & Mitigation**: The contract design includes a powerful `emergencyRecover` function. To mitigate risk, this function is strictly controlled by a dedicated `MULTISIG_ROLE`, which is separate from the `DEFAULT_ADMIN_ROLE`. This enforces the principle of least privilege. For production deployment, the `MULTISIG_ROLE` must be assigned to a secure, multi-signature wallet.
+- **Gas Efficiency**: The use of `EnumerableSet` for staker management effectively mitigates gas limit concerns related to adding new stakers, as the operation has a constant time complexity.
+
+## Recommendations
+
+- **Secure Role Management**: It is critical that the `MULTISIG_ROLE` and `DEFAULT_ADMIN_ROLE` are managed by secure, time-locked multisig wallets in a production environment.
+- **Event Emission**: Ensure all state-changing functions emit events for comprehensive off-chain tracking.

@@ -36,13 +36,13 @@ contract TieredRewardStrategy is IRewardStrategy, AccessControl {
 
     function calculateReward(
         address staker,
-        uint256 stakeId
+        bytes32 stakeId
     ) external view returns (uint256) {
         IStakingStorage.Stake memory stake = stakingStorage.getStake(
             staker,
             stakeId
         );
-        uint256 blocksPassed = block.timestamp - stake.timestamp;
+        uint256 blocksPassed = block.timestamp / 86400 - stake.stakeDay;
 
         // Find applicable tier
         uint256 multiplier = 10_000; // Default 1.0x
@@ -81,7 +81,7 @@ contract TieredRewardStrategy is IRewardStrategy, AccessControl {
      */
     function isApplicable(
         address staker,
-        uint256 stakeId
+        bytes32 stakeId
     ) public view returns (bool canApply) {
         canApply = true;
         IStakingStorage.Stake memory stake = stakingStorage.getStake(
@@ -91,8 +91,8 @@ contract TieredRewardStrategy is IRewardStrategy, AccessControl {
 
         if (blacklist[staker]) canApply = false;
         if (
-            stake.timestamp > strategyParameters.endTimestamp &&
-            stake.timestamp < strategyParameters.startTimestamp
+            stake.stakeDay > strategyParameters.endDay &&
+            stake.stakeDay < strategyParameters.startDay
         ) {
             canApply = false;
         }

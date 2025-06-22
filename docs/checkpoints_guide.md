@@ -2,7 +2,7 @@
 
 ## What Are Checkpoints?
 
-of checkpoints as automatic "snapshots" that the staking system takes every time something important happens. It's like having a detailed photo album of your staking journey, with each photo showing exactly how much you had staked at specific moments in time.
+Think of checkpoints as automatic "snapshots" that the staking system takes every time something important happens. It's like having a detailed photo album of your staking journey, with each photo showing exactly how much you had staked at specific moments in time.
 
 ### Why Should You Care?
 
@@ -32,24 +32,24 @@ Let's follow Alice through her staking journey:
 
 - **Action**: Alice stakes 1,000 tokens with a 30-day lock
 - **Checkpoint Created**: 📸 _Snapshot taken_
-  - Alice: 1,000 staked
-  - Total system: 50,000 staked (including other users)
+  - Alice: 1,000 tokens staked
+  - Total system: 50,000 tokens staked (including other users)
   - Timestamp: Day 1, 10:00 AM
 
 #### Day 10: Alice Stakes More
 
 - **Action**: Alice stakes another 500 tokens
 - **Checkpoint Created**: 📸 _Snapshot taken_
-  - Alice: 1,500 staked (1,000 + 500)
-  - Total system: 75,000 staked
+  - Alice: 1,500 tokens staked (1,000 + 500)
+  - Total system: 75,000 tokens staked
   - Timestamp: Day 10, 2:30 PM
 
 #### Day 35: Alice Unstakes Part
 
-- **Action**: Alice unstakes her first stake (1,000 TKNFF)
+- **Action**: Alice unstakes her first stake (1,000 tokens)
 - **Checkpoint Created**: 📸 _Snapshot taken_
-  - Alice: 500 staked (remaining stake)
-  - Total system: 60,000 staked
+  - Alice: 500 tokens staked (remaining stake)
+  - Total system: 60,000 tokens staked
   - Timestamp: Day 35, 11:15 AM
 
 ### What This Means for Rewards
@@ -98,7 +98,7 @@ For the entire network, checkpoints track:
 - **System growth** and adoption metrics
 - **Pool distribution** for reward calculations
 
-## How to About Your Staking Strategy
+## How to Think About Your Staking Strategy
 
 Understanding checkpoints can help you make better staking decisions:
 
@@ -124,12 +124,12 @@ Understanding checkpoints can help you make better staking decisions:
 
 ### Example 1: The Consistent Staker
 
-**Sarah's Strategy**: Stakes 1,000 for 6 months, never unstakes
+**Sarah's Strategy**: Stakes 1,000 tokens for 6 months, never unstakes
 
 **Checkpoint History**:
 
-- Day 1: 1,000 staked
-- Day 180: Still 1,000 staked
+- Day 1: 1,000 tokens staked
+- Day 180: Still 1,000 tokens staked
 
 **Reward Advantage**: Clean, consistent history shows strong commitment
 
@@ -139,9 +139,9 @@ Understanding checkpoints can help you make better staking decisions:
 
 **Checkpoint History**:
 
-- Month 1: 500 staked
-- Month 2: 1,000 staked (added 500)
-- Month 3: 1,500 staked (added 500)
+- Month 1: 500 tokens staked
+- Month 2: 1,000 tokens staked (added 500)
+- Month 3: 1,500 tokens staked (added 500)
 
 **Reward Advantage**: Growing commitment is visible in snapshots
 
@@ -151,8 +151,8 @@ Understanding checkpoints can help you make better staking decisions:
 
 **Checkpoint History**:
 
-- Day 1: 500 (30-day lock)
-- Day 1: 500 (90-day lock)
+- Day 1: 500 tokens (30-day lock)
+- Day 1: 500 tokens (90-day lock)
 - Day 31: Unstakes first, immediately restakes with 90-day lock
 
 **Reward Advantage**: Maintains strong position while optimizing for lock bonuses

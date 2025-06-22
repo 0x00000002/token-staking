@@ -3,17 +3,17 @@
 pragma solidity ^0.8.30;
 
 import "@openzeppelin/contracts/access/AccessControl.sol";
-import "./interfaces/IRewardCalculator.sol";
+import "./interfaces/IRewardManager.sol";
 import "./interfaces/IRewardStrategy.sol";
 import "./interfaces/IStakingStorage.sol";
 
-import "./RewardStrategyRegistry.sol";
+import "./strategies/StrategiesRegistry.sol";
 
-contract RewardManager is IRewardCalculator, AccessControl {
+contract RewardManager is IRewardManager, AccessControl {
     bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
     bytes32 public constant CONTROLLER_ROLE = keccak256("CONTROLLER_ROLE");
 
-    RewardStrategyRegistry public strategyRegistry;
+    StrategiesRegistry public strategyRegistry;
     IStakingStorage public stakingStorage;
 
     address public controller;
@@ -32,12 +32,15 @@ contract RewardManager is IRewardCalculator, AccessControl {
     function calculateStakeReward(
         address staker,
         uint256 stakeId
-    ) external view returns (uint256) {}
+    ) external view returns (uint256) {
+        // Basic implementation - return 0 for now
+        return 0;
+    }
 
     // Calculate rewards for multiple stakes
     function calculateReward(
         address staker,
-        uint256 stakeId
+        bytes32 stakeId
     ) external view returns (uint256 totalReward) {
         uint256[] memory activeStrategyIds = strategyRegistry
             .getActiveStrategies();
@@ -56,5 +59,66 @@ contract RewardManager is IRewardCalculator, AccessControl {
     }
 
     // Preview total rewards across all stakes
-    function previewReward(address staker) external view returns (uint256) {}
+    function previewReward(address staker) external view returns (uint256) {
+        // Basic implementation - return 0 for now
+        return 0;
+    }
+
+    function claimAllRewards() external override returns (uint256) {
+        // Basic implementation - return 0 for now
+        return 0;
+    }
+
+    function claimRewards(
+        bytes32[] calldata stakeIds
+    ) external override returns (uint256) {
+        // Basic implementation - return 0 for now
+        return 0;
+    }
+
+    function claimStakeReward(
+        bytes32 stakeId
+    ) external override returns (uint256) {
+        // Basic implementation - return 0 for now
+        return 0;
+    }
+
+    function getClaimableReward(
+        address staker
+    ) external view override returns (uint256) {
+        // Basic implementation - return 0 for now
+        return 0;
+    }
+
+    function getStakeClaimableReward(
+        address staker,
+        bytes32 stakeId
+    ) external view override returns (uint256) {
+        // Basic implementation - return 0 for now
+        return 0;
+    }
+
+    function getStakesClaimableRewards(
+        address staker,
+        bytes32[] calldata stakeIds
+    ) external view override returns (uint256[] memory, uint256 total) {
+        uint256[] memory rewards = new uint256[](stakeIds.length);
+        for (uint256 i = 0; i < stakeIds.length; i++) {
+            rewards[i] = 0; // Basic implementation - return 0 for now
+            total += rewards[i];
+        }
+        return (rewards, total);
+    }
+
+    function addRewardFunds(uint256 amount) external override {
+        // Basic implementation - no-op for now
+    }
+
+    function withdrawRewardFunds(uint256 amount) external override {
+        // Basic implementation - no-op for now
+    }
+
+    function setRewardCalculator(address calculatorAddress) external override {
+        // Basic implementation - no-op for now
+    }
 }

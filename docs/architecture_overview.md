@@ -88,12 +88,16 @@ Each stake follows a complete lifecycle with full traceability:
 - **Reentrancy Protection**: Guards against recursive call attacks
 - **Pause Mechanism**: Emergency system shutdown capability
 - **Time Lock Enforcement**: Immutable stake duration requirements
+- **Emergency Recovery**: A feature controlled by a dedicated `MULTISIG_ROLE` to recover any ERC20 tokens accidentally sent to the contract. This prevents loss of funds while ensuring the action is controlled by a secure, multi-signature entity, separate from the general admin role.
 
 #### Separation of Concerns
 
 - **StakingVault**: Handles external interactions and security checks
 - **StakingStorage**: Manages data integrity and historical records
 - **Clear Boundaries**: Minimizes attack surface through modular design
+- **Strict Role-Based Access Control**: Sensitive operations are protected by specific roles. A `MANAGER_ROLE` handles operational pausing, while a unique `MULTISIG_ROLE` is exclusively assigned to the emergency recovery function. This granular control follows the principle of least privilege.
+- **Reentrancy Protection**: Key functions are guarded against reentrancy attacks using OpenZeppelin's `ReentrancyGuard`.
+- **Pause Capability**: The system can be paused by a `MANAGER_ROLE` in case of an emergency, halting all primary functions like staking and unstaking.
 
 ## Integration Architecture
 
@@ -208,6 +212,57 @@ Comprehensive event emission for complete system transparency:
 - **Integration Layers**: External contracts can build on top of the core system
 - **Backward Compatibility**: Future enhancements maintain compatibility
 
+## Core Workflows
+
+To understand how the system functions, here are the two primary user-facing interactions represented as sequence diagrams.
+
+### Staking Flow (`stake`)
+
+This diagram shows how a user's call to `stake` interacts across the different contracts to create a new stake.
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant StakingVault
+    participant ERC20
+    participant StakingStorage
+
+    User->>+StakingVault: stake(amount, daysLock)
+    StakingVault->>+ERC20: safeTransferFrom(User, StakingVault, amount)
+    ERC20-->>-StakingVault: (tokens transferred)
+    StakingVault->>+StakingStorage: createStake(User, stakeId, amount, daysLock, false)
+    StakingStorage-->>-StakingVault: (state updated)
+    Note over StakingVault: Emits Staked event
+    StakingVault-->>-User: returns stakeId
+```
+
+### Unstaking Flow (`unstake`)
+
+This diagram illustrates the process of unstaking, including fetching the stake data, validation, and returning the tokens.
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant StakingVault
+    participant StakingStorage
+    participant ERC20
+
+    User->>+StakingVault: unstake(stakeId)
+    StakingVault->>+StakingStorage: getStake(User, stakeId)
+    StakingStorage-->>-StakingVault: returns Stake data
+    Note over StakingVault: Validates stake maturity<br/>and status
+    StakingVault->>+StakingStorage: removeStake(User, stakeId)
+    StakingStorage-->>-StakingVault: (state updated)
+    StakingVault->>+ERC20: safeTransfer(User, amount)
+    ERC20-->>-StakingVault: (tokens transferred)
+    Note over StakingVault: Emits Unstaked event
+    StakingVault-->>-User: (unstake complete)
+```
+
+## Key Features
+
+- **Flexible Staking**: Users can create multiple stakes with different time lock periods.
+
 ---
 
-This architecture provides a robust foundation for the Token staking ecosystem, with careful attention to security, efficiency, and future extensibility. The separation between business logic and data storage ensures that the system can evolve while maintaining data integrity and user trust.
+This architecture provides a robust foundation, with careful attention to security, efficiency, and future extensibility. The separation between business logic and data storage ensures that the system can evolve while maintaining data integrity and user trust.

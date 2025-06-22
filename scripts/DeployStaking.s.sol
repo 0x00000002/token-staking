@@ -9,12 +9,13 @@ import "../src/Token.sol";
 
 /**
  * @title DeployStaking
- * @notice Deployment script for the Token staking system
+ * @notice Deployment script for the  Token staking system
  */
 contract DeployStaking is Script {
     // Configuration - Replace with actual addresses
     address constant ADMIN = 0x1234567890123456789012345678901234567890;
     address constant MANAGER = 0x2345678901234567890123456789012345678901;
+    address constant MULTISIG = 0x3456789012345678901234567890123456789012;
 
     // Optional: Use existing token address
     address constant EXISTING_TOKEN = address(0); // Set to deployed token address or leave as 0
@@ -47,7 +48,8 @@ contract DeployStaking is Script {
             IERC20(tokenAddress),
             address(stakingStorage),
             ADMIN,
-            MANAGER
+            MANAGER,
+            MULTISIG
         );
         console.log("StakingVault deployed at:", address(stakingVault));
 
@@ -65,6 +67,7 @@ contract DeployStaking is Script {
         console.log("StakingVault:   ", address(stakingVault));
         console.log("Admin:          ", ADMIN);
         console.log("Manager:        ", MANAGER);
+        console.log("Multisig:       ", MULTISIG);
         console.log("==========================================");
 
         console.log("\nNext steps:");

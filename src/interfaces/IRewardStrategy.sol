@@ -11,8 +11,8 @@ interface IRewardStrategy {
     struct StrategyParameters {
         string name;
         string description;
-        uint32 startTimestamp;
-        uint32 endTimestamp;
+        uint16 startDay;
+        uint16 endDay;
     }
 
     /**
@@ -23,7 +23,7 @@ interface IRewardStrategy {
      */
     function calculateReward(
         address staker,
-        uint256 stakeId
+        bytes32 stakeId
     ) external view returns (uint256);
 
     /**
@@ -46,6 +46,6 @@ interface IRewardStrategy {
      */
     function isApplicable(
         address staker,
-        uint256 stakeId
+        bytes32 stakeId
     ) external view returns (bool);
 }

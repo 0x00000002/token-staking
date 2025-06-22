@@ -48,7 +48,8 @@ export RPC_URL=https://sepolia.infura.io/v3/**********
 export DEPLOYER_PK=0x42aa06dc8c320e0255df8d95494f6a7b66e10fa30919a24ad910a6c2bdbcc8ee
 export ADMIN=0xeb24a849E6C908D4166D34D7E3133B452CB627D2
 export MANAGER=0x1Fb0E85b7Ba55F0384d0E06D81DF915aeb3baca3
-export TOKEN=0x6e0b07E7A1B550D83E2f11C98Cf1E15fe2b8d47B  # token or other ERC20
+export MULTISIG=0x... # Address for the separate, secure multisig wallet
+export TOKEN=0x....
 export ETHERSCAN_API_KEY=
 ```
 
@@ -104,7 +105,7 @@ forge verify-contract $STAKING_STORAGE \
 ```sh
 forge create --broadcast ./src/StakingVault.sol:StakingVault --rpc-url $RPC_URL \
   --private-key $DEPLOYER_PK \
-  --constructor-args $TOKEN $STAKING_STORAGE $ADMIN $MANAGER
+  --constructor-args $TOKEN $STAKING_STORAGE $ADMIN $MANAGER $MULTISIG
 ```
 
 Set the vault address: `export STAKING_VAULT=0x....`
@@ -119,7 +120,7 @@ forge verify-contract $STAKING_VAULT \
   --num-of-optimizations 200 \
   --watch \
   --etherscan-api-key $ETHERSCAN_API_KEY \
-  --constructor-args $(cast abi-encode "constructor(address,address,address,address)" $TOKEN $STAKING_STORAGE $ADMIN $MANAGER)
+  --constructor-args $(cast abi-encode "constructor(address,address,address,address,address)" $TOKEN $STAKING_STORAGE $ADMIN $MANAGER $MULTISIG)
 ```
 
 #### Setup Roles
@@ -166,35 +167,20 @@ cast send $STAKING_VAULT "stake(uint128,uint16)" 1000000000000000000 30 \
   --rpc-url $RPC_URL --private-key $DEPLOYER_PK
 ```
 
-## Deployed Contracts
-
-### Sepolia Testnet
-
-**Core Staking System:**
-
-- [StakingVault](https://sepolia.etherscan.io/address/0x5B9801ab239F07B75BffACF7e82DB05D01a1D763/#code)
-- [StakingStorage](https://sepolia.etherscan.io/address/0x6A1ECdc267e80346F7526Fa320b7a0c147093a17/#code)
-
-**Related Contracts:**
-
-- [Claiming Contract](https://sepolia.etherscan.io/address/0x0b9f301DB9cDA7C8B736927eF3E745De12b81581/#code)
-- [Token](https://sepolia.etherscan.io/address/0x6e0b07E7A1B550D83E2f11C98Cf1E15fe2b8d47B#code)
-- [Swapper](https://sepolia.etherscan.io/address/0xcc8c29eeaeab964587becb89e854006399b57ffa#code)
-- [ASTO Token](https://sepolia.etherscan.io/address/0xAFd24e5B967148a3e83Cc51b20f31ef507315B29#code)
-
 ## Available Deployment Scripts
 
 ### 1. DeployStaking.s.sol
 
 - Deploys new token and complete staking system
 - Good for testing and new deployments
-- Automatically sets up all roles
+- Automatically sets up all roles, including the `MULTISIG_ROLE`
 
 ### 2. DeployWithExistingToken.s.sol
 
-- Uses existing token (like TKNFF)
+- Uses existing token (like USDC)
 - Reads configuration from environment variables
 - Provides verification commands
+- Automatically sets up all roles, including the `MULTISIG_ROLE`
 - **Recommended for production deployments**
 
 ### 3. DeployModularStaking.s.sol

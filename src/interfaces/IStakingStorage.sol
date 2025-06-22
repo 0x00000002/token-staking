@@ -19,7 +19,8 @@ interface IStakingStorage {
         uint128 totalStaked;
         uint128 totalRewarded;
         uint128 totalClaimed;
-        uint16 stakesCount;
+        uint16 stakesCounter;
+        uint16 activeStakesNumber;
         uint16 lastCheckpointDay;
     }
 
@@ -61,7 +62,10 @@ interface IStakingStorage {
         bool isFromClaim
     ) external;
 
-    function removeStake(bytes32 stakeId) external;
+    function removeStake(
+        address staker,
+        bytes32 stakeId
+    ) external;
 
     function getStake(
         address staker,

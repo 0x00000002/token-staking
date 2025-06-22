@@ -2,14 +2,14 @@
 
 ## What is Token Staking?
 
-Token Staking is a decentralized application (dApp) that allows you to "stake" your tokens to help secure the network and earn rewards. of staking like putting your money in a savings account - you lock up your tokens for a period of time and get rewarded for doing so.
+Token Staking is a decentralized application (dApp) that allows you to "stake" your tokens to help secure the network and earn rewards. Think of staking like putting your money in a savings account - you lock up your tokens for a period of time and get rewarded for doing so.
 
 ## Why Should You Stake?
 
 ### Benefits of Staking
 
 - **Earn Rewards**: Get additional tokens as rewards for staking
-- **Support the Network**: Help secure and maintain the ecosystem
+- **Support the Network**: Help secure and maintain the token ecosystem
 - **Flexible Terms**: Choose your own lock-up periods based on your preferences
 - **Compound Growth**: Stake your rewards to earn even more
 
@@ -24,7 +24,7 @@ Token Staking is a decentralized application (dApp) that allows you to "stake" y
 
 ### The Basic Process
 
-1. **Approve Tokens**: Give permission for the staking contract to use your tokens
+1. **Approve Tokens**: Give permission for the staking contract to use your staking tokens
 2. **Choose Lock Period**: Decide how long you want to lock your tokens (can be zero for no lock)
 3. **Stake Your Tokens**: Send your tokens to the staking contract
 4. **Wait**: Your tokens are locked for the chosen period
@@ -55,7 +55,7 @@ This is where you interact with the system. It handles:
 - **Enforcing time locks** (making sure you can't unstake too early)
 - **Security controls** (pausing system if needed)
 
-of this as the "front desk" - it's what you interact with directly.
+Think of this as the "front desk" - it's what you interact with directly.
 
 #### StakingStorage (The Record Keeper)
 
@@ -66,7 +66,7 @@ This contract keeps track of everything behind the scenes:
 - **Historical data** showing how staking amounts changed over time
 - **Managing stake lifecycle** (creation, tracking, deletion)
 
-of this as the "database" - it remembers everything that happens.
+Think of this as the "database" - it remembers everything that happens.
 
 ### Why Two Contracts?
 
@@ -128,7 +128,7 @@ We separated these functions because:
 
 ### What You Need
 
-1. **Tokens**: The tokens you want to stake
+1. **Staking Tokens**: The tokens you want to stake
 2. **Crypto Wallet**: Like MetaMask, to interact with the blockchain
 3. **Small Amount of ETH**: To pay for transaction fees (gas)
 4. **Basic Understanding**: Of how long you want to lock your tokens
@@ -136,7 +136,7 @@ We separated these functions because:
 ### Step-by-Step Process
 
 1. **Connect Your Wallet** to the staking interface
-2. **Check Your Balance** to see how many tokens you have
+2. **Check Your Balance** to see how many staking tokens you have
 3. **Approve Tokens** by confirming a transaction that lets the contract use your tokens
 4. **Choose Stake Amount** - how many tokens you want to stake
 5. **Select Time Lock** - how long you want to lock them (or choose no lock)

@@ -3,6 +3,7 @@
 pragma solidity ^0.8.30;
 
 import "@openzeppelin/contracts/access/AccessControl.sol";
+import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import "./interfaces/IStakingStorage.sol";
 
 /**
@@ -10,8 +11,10 @@ import "./interfaces/IStakingStorage.sol";
  * @notice Storage for staking data
  */
 contract StakingStorage is IStakingStorage, AccessControl {
-    bytes32 constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
-    bytes32 constant CONTROLLER_ROLE = keccak256("CONTROLLER_ROLE");
+    using EnumerableSet for EnumerableSet.AddressSet;
+
+    bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
+    bytes32 public constant CONTROLLER_ROLE = keccak256("CONTROLLER_ROLE");
 
     // Core storage mappings
     mapping(address staker => mapping(uint16 day => bytes32[])) public IDs;
@@ -23,8 +26,7 @@ contract StakingStorage is IStakingStorage, AccessControl {
     mapping(uint16 dayNumber => DailySnapshot) private _dailySnapshots;
 
     // Global state
-    address[] private _allStakers;
-    mapping(address => bool) private _isStakerRegistered;
+    EnumerableSet.AddressSet private _allStakers;
     uint128 private _currentTotalStaked;
     uint16 private _currentDay;
 
@@ -68,13 +70,15 @@ contract StakingStorage is IStakingStorage, AccessControl {
 
         IDs[staker][today].push(id);
 
-        // Register staker if new
-        if (!_isStakerRegistered[staker]) {
-            _registerStaker(staker);
+        // Add staker to the set. If the staker is new, the .add function returns true.
+        if (_allStakers.add(staker)) {
+            // New staker, set their initial checkpoint day.
+            _stakers[staker].lastCheckpointDay = today;
         }
 
         // Update staker info
-        _stakers[staker].stakesCount++;
+        _stakers[staker].activeStakesNumber++;
+        _stakers[staker].stakesCounter++;
         _stakers[staker].totalStaked += amount;
 
         // Update balances and checkpoints
@@ -84,8 +88,10 @@ contract StakingStorage is IStakingStorage, AccessControl {
         emit Staked(staker, id, amount, today, daysLock, isFromClaim);
     }
 
-    function removeStake(bytes32 id) external onlyRole(CONTROLLER_ROLE) {
-        address staker = msg.sender;
+    function removeStake(
+        address staker,
+        bytes32 id
+    ) external onlyRole(CONTROLLER_ROLE) {
         Stake storage stake = _stakes[staker][id];
 
         require(stake.amount > 0, StakeNotFound(staker, id));
@@ -98,7 +104,8 @@ contract StakingStorage is IStakingStorage, AccessControl {
         stake.unstakeDay = today;
 
         // Update staker info
-        _stakers[staker].stakesCount--;
+        _stakers[staker].totalStaked -= amount;
+        _stakers[staker].activeStakesNumber--;
 
         // Update balances and checkpoints
         _updateStakerCheckpoint(staker, today, -int256(uint256(amount)));
@@ -174,7 +181,7 @@ contract StakingStorage is IStakingStorage, AccessControl {
         uint256 offset,
         uint256 limit
     ) external view returns (address[] memory) {
-        uint256 total = _allStakers.length;
+        uint256 total = _allStakers.length();
         require(offset < total, OutOfBounds(total, offset));
 
         uint256 end = offset + limit;
@@ -184,13 +191,13 @@ contract StakingStorage is IStakingStorage, AccessControl {
 
         address[] memory result = new address[](end - offset);
         for (uint256 i = offset; i < end; i++) {
-            result[i - offset] = _allStakers[i];
+            result[i - offset] = _allStakers.at(i);
         }
         return result;
     }
 
     function getTotalStakersCount() external view returns (uint256) {
-        return _allStakers.length;
+        return _allStakers.length();
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -199,12 +206,6 @@ contract StakingStorage is IStakingStorage, AccessControl {
 
     function _getCurrentDay() internal view returns (uint16) {
         return uint16(block.timestamp / 1 days);
-    }
-
-    function _registerStaker(address staker) internal {
-        _allStakers.push(staker);
-        _isStakerRegistered[staker] = true;
-        _stakers[staker].lastCheckpointDay = _getCurrentDay();
     }
 
     function _updateStakerCheckpoint(
@@ -244,7 +245,7 @@ contract StakingStorage is IStakingStorage, AccessControl {
             staker,
             day,
             currentBalance,
-            _stakers[staker].stakesCount
+            _stakers[staker].activeStakesNumber
         );
     }
 
@@ -255,18 +256,22 @@ contract StakingStorage is IStakingStorage, AccessControl {
     ) internal {
         DailySnapshot storage snapshot = _dailySnapshots[day];
 
-        // Update total staked amount
         if (amountDelta >= 0) {
-            snapshot.totalStakedAmount += uint128(uint256(amountDelta));
-            _currentTotalStaked += uint128(uint256(amountDelta));
+            uint128 increase = uint128(uint256(amountDelta));
+            snapshot.totalStakedAmount += increase;
+            _currentTotalStaked += increase;
         } else {
             uint128 decrease = uint128(uint256(-amountDelta));
-            snapshot.totalStakedAmount = snapshot.totalStakedAmount >= decrease
-                ? snapshot.totalStakedAmount - decrease
-                : 0;
-            _currentTotalStaked = _currentTotalStaked >= decrease
-                ? _currentTotalStaked - decrease
-                : 0;
+            if (snapshot.totalStakedAmount >= decrease) {
+                snapshot.totalStakedAmount -= decrease;
+            } else {
+                snapshot.totalStakedAmount = 0;
+            }
+            if (_currentTotalStaked >= decrease) {
+                _currentTotalStaked -= decrease;
+            } else {
+                _currentTotalStaked = 0;
+            }
         }
 
         // Update stakes count
@@ -284,16 +289,18 @@ contract StakingStorage is IStakingStorage, AccessControl {
         address staker,
         uint16 targetDay
     ) internal view returns (uint128) {
+        uint16[] memory checkpoints = _stakerCheckpoints[staker];
+        uint256 nCheckpoints = checkpoints.length;
+
+        // Return 0 if no checkpoints exist
+        if (nCheckpoints == 0) {
+            return 0;
+        }
+
         // Quick exact match check
         uint128 exactBalance = _stakerBalances[staker][targetDay];
         if (exactBalance > 0) {
             return exactBalance;
-        }
-
-        // Find closest checkpoint using binary search
-        uint16[] memory checkpoints = _stakerCheckpoints[staker];
-        if (checkpoints.length == 0) {
-            return 0;
         }
 
         // Handle edge case: target is before first checkpoint
@@ -303,7 +310,7 @@ contract StakingStorage is IStakingStorage, AccessControl {
 
         // Binary search for closest checkpoint
         uint256 left = 0;
-        uint256 right = checkpoints.length - 1;
+        uint256 right = nCheckpoints - 1;
         uint16 closest = 0;
 
         while (left <= right) {

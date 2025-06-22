@@ -80,7 +80,9 @@ contract RewardStorage is IRewardStorage, AccessControl {
 
     function getRewardsCount(
         address staker
-    ) external view override returns (uint256) {}
+    ) external view override returns (uint256) {
+        return rewardsCount[staker];
+    }
 
     function getTotalRewards(
         address staker
@@ -91,5 +93,7 @@ contract RewardStorage is IRewardStorage, AccessControl {
     function getRewardsByTimestamp(
         address staker,
         uint32 timestamp
-    ) external view override returns (Reward[] memory) {}
+    ) external view override returns (Reward[] memory) {
+        return rewardsByTimestamp[timestamp];
+    }
 }

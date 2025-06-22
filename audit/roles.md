@@ -44,6 +44,20 @@ function unpause() external onlyRole(MANAGER_ROLE)
 
 **Design rationale:** We separated these functions into a dedicated role to allow our operations team to make routine adjustments without requiring admin intervention. This reduces friction for necessary operational changes while maintaining security boundaries.
 
+### MULTISIG_ROLE (`keccak256("MULTISIG_ROLE")`)
+
+**Available in:** StakingVault only
+
+This is a highly specialized and powerful role intended exclusively for a secure, multi-signature wallet. Its sole purpose is to execute the emergency token recovery, providing a safeguard against accidentally sent funds.
+
+**StakingVault Permissions:**
+
+```solidity
+function emergencyRecover(IERC20 token_, uint256 amount) external onlyRole(MULTISIG_ROLE)
+```
+
+**Design rationale:** We have isolated the `emergencyRecover` function from the `DEFAULT_ADMIN_ROLE` to enforce the principle of least privilege. By requiring a unique, hardware-secured role, we significantly reduce the risk associated with the compromise of any single administrative or operational key. This ensures that the recovery of funds is a deliberate, multi-party action.
+
 ### CONTROLLER_ROLE (`keccak256("CONTROLLER_ROLE")`)
 
 **Available in:** StakingStorage only
@@ -79,8 +93,9 @@ In our production environment:
 
 1. **DEFAULT_ADMIN_ROLE**: Assigned to a secure multisig wallet (core team members)
 2. **MANAGER_ROLE**: Assigned to a dedicated operations wallet with enhanced security
-3. **CONTROLLER_ROLE**: Assigned exclusively to the StakingVault contract address
-4. **CLAIM_CONTRACT_ROLE**: Assigned to authorized external claiming contracts
+3. **MULTISIG_ROLE**: Assigned to a separate, highly secure multisig wallet, distinct from the admin multisig.
+4. **CONTROLLER_ROLE**: Assigned exclusively to the StakingVault contract address
+5. **CLAIM_CONTRACT_ROLE**: Assigned to authorized external claiming contracts
 
 ## Contract Integration and Setup
 
@@ -103,6 +118,8 @@ constructor(
 ) {
     _grantRole(DEFAULT_ADMIN_ROLE, _admin);
     _grantRole(MANAGER_ROLE, _manager);
+    _grantRole(CONTROLLER_ROLE, _admin);
+    _grantRole(MULTISIG_ROLE, _admin);
     // ... other initialization
 }
 ```
@@ -129,7 +146,7 @@ constructor(address admin, address manager, address vault) {
 ### Operational Workflows
 
 1. **Regular Operations** (pause/unpause): Performed by MANAGER_ROLE
-2. **Emergency Recovery** (stuck token recovery): Requires DEFAULT_ADMIN_ROLE
+2. **Emergency Recovery** (stuck token recovery): Requires the dedicated `MULTISIG_ROLE`.
 3. **Role Management** (adding/removing roles): Requires DEFAULT_ADMIN_ROLE
 4. **Stake Operations** (create/remove stakes): Performed by CONTROLLER_ROLE (StakingVault)
 5. **Claim Integration** (staking from external claims): Performed by CLAIM_CONTRACT_ROLE

@@ -57,14 +57,13 @@ This document defines use cases for the STAKING SUBSYSTEM ONLY. The reward syste
 - Current day >= stake day + days lock (`_getCurrentDay() >= matureDay`)
 - Contract is not paused
 - Stake hasn't been previously unstaked (`unstakeDay == 0`)
-- User is the owner of the stake
 
 **Flow**:
 
 1. User calls `StakingVault.unstake(bytes32 stakeId)`
-2. Vault retrieves stake via `StakingStorage.getStake(caller, stakeId)`
-3. Vault validates stake ownership and maturity
-4. Vault calls `StakingStorage.removeStake(stakeId)`
+2. Vault retrieves stake via `StakingStorage.getStake(msg.sender, stakeId)`. Stake ownership is implicitly validated here; if `msg.sender` is not the owner, the stake will not be found.
+3. Vault validates stake maturity
+4. Vault calls `StakingStorage.removeStake(msg.sender, stakeId)`
 5. Storage marks stake as unstaked (sets `unstakeDay`) and updates balances
 6. Vault transfers tokens back to user
 
@@ -148,7 +147,7 @@ This document defines use cases for the STAKING SUBSYSTEM ONLY. The reward syste
 
 ### UC6: Emergency Token Recovery
 
-**Actor**: Admin (DEFAULT_ADMIN_ROLE)  
+**Actor**: Multisig Wallet (MULTISIG_ROLE)  
 **Description**: Emergency recovery of tokens from the StakingVault contract  
 **Contract**: StakingVault
 
@@ -161,12 +160,12 @@ This document defines use cases for the STAKING SUBSYSTEM ONLY. The reward syste
 
 **Flow**:
 
-1. Admin calls `StakingVault.emergencyRecover(IERC20 token_, uint256 amount)`
-2. Specified tokens are transferred to admin
+1. Multisig calls `StakingVault.emergencyRecover(IERC20 token_, uint256 amount)`
+2. Specified tokens are transferred to multisig wallet
 
 **Postconditions**:
 
-- Tokens are transferred to admin address
+- Tokens are transferred to multisig wallet
 - Contract balance decreases
 
 ### UC7: Role Management
@@ -199,7 +198,7 @@ This document defines use cases for the STAKING SUBSYSTEM ONLY. The reward syste
 
 - Actor has CLAIM_CONTRACT_ROLE
 - Contract is not paused
-- Tokens have been transferred to vault prior to call
+- Tokens have been transferred to vault prior to call (by claiming contract)
 - Amount is greater than zero
 - Staker address is valid
 

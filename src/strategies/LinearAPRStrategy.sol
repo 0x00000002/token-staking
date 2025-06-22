@@ -31,11 +31,6 @@ contract LinearAPRStrategy is IRewardStrategy, AccessControl {
     }
 
     function calculateReward(
-        address staker,
-        uint256 stakeId
-    ) external view returns (uint256) {}
-
-    function calculateReward(
         address,
         uint32[] calldata timestamps,
         uint256[] calldata stakeValues
@@ -88,7 +83,13 @@ contract LinearAPRStrategy is IRewardStrategy, AccessControl {
      * @notice Updates the strategy parameters
      * @param params Array of parameter values to update
      */
-    function updateParameters(uint256[] calldata params) external {}
+    function updateParameters(uint256[] calldata params) external onlyRole(MANAGER_ROLE) {
+        // Basic implementation - update strategy parameters
+        if (params.length >= 2) {
+            strategyParameters.startDay = uint16(params[0]);
+            strategyParameters.endDay = uint16(params[1]);
+        }
+    }
 
     /**
      * @notice Validates if this strategy can be applied to a given stake
@@ -98,7 +99,7 @@ contract LinearAPRStrategy is IRewardStrategy, AccessControl {
      */
     function isApplicable(
         address staker,
-        uint256 stakeId
+        bytes32 stakeId
     ) public view returns (bool canApply) {
         canApply = true;
         IStakingStorage.Stake memory stake = stakingStorage.getStake(
@@ -108,10 +109,24 @@ contract LinearAPRStrategy is IRewardStrategy, AccessControl {
 
         if (blacklist[staker]) canApply = false;
         if (
-            stake.timestamp > strategyParameters.endTimestamp &&
-            stake.timestamp < strategyParameters.startTimestamp
+            stake.stakeDay > strategyParameters.endDay &&
+            stake.stakeDay < strategyParameters.startDay
         ) {
             canApply = false;
         }
+    }
+
+    function calculateReward(
+        address staker,
+        bytes32 stakeId
+    ) external view override returns (uint256) {
+        IStakingStorage.Stake memory stake = stakingStorage.getStake(
+            staker,
+            stakeId
+        );
+
+        uint256 blocksPassed = block.timestamp / 86400 - stake.stakeDay;
+        
+        return (stake.amount * annualRate * blocksPassed) / (blocksPerYear * 10_000);
     }
 }

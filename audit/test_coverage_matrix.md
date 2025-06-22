@@ -15,7 +15,7 @@ This matrix maps use cases to test cases and functions, ensuring comprehensive c
 | **UC3: Query Active Stakes**          | Query stake and balance information | TC13, TC14                       | `StakingStorage.getStake()`, `getStakerInfo()`, `isActiveStake()` |
 | **UC4: Pause System**                 | Manager pauses staking system       | TC8, TC10, TC22                  | `StakingVault.pause()`                                            |
 | **UC5: Unpause System**               | Manager unpauses system             | TC9                              | `StakingVault.unpause()`                                          |
-| **UC6: Emergency Token Recovery**     | Admin recovers tokens               | TC11, TC24                       | `StakingVault.emergencyRecover()`                                 |
+| **UC6: Emergency Token Recovery**     | Admin recovers tokens               | TC11, TC12, TC24                 | `StakingVault.emergencyRecover()`                                 |
 | **UC7: Role Management**              | Admin manages roles                 | TC12, TC24                       | `grantRole()`, `revokeRole()`                                     |
 | **UC8: Stake from Claim**             | Claim contract stakes for user      | TC6, TC7                         | `StakingVault.stakeFromClaim()`                                   |
 | **UC9: Historical Balance Queries**   | Query historical staking data       | TC15, TC16, TC17                 | `StakingStorage.getStakerBalanceAt()`, `batchGetStakerBalances()` |
@@ -23,7 +23,7 @@ This matrix maps use cases to test cases and functions, ensuring comprehensive c
 | **UC11: Immature Stake Unstaking**    | Reject premature unstaking          | TC3, TC29                        | Time lock validation in `unstake()`                               |
 | **UC12: Invalid Stake Operations**    | Handle various error conditions     | TC4, TC5, TC19, TC20, TC21       | Error handling across functions                                   |
 | **UC13: Paused System Operations**    | Reject operations when paused       | TC22                             | Pausable modifier enforcement                                     |
-| **UC14: Access Control Enforcement**  | Ensure role-based permissions       | TC7, TC10, TC24                  | Role modifier enforcement                                         |
+| **UC14: Access Control Enforcement**  | Ensure role-based permissions       | TC7, TC10, TC12, TC24            | Role modifier enforcement                                         |
 | **UC15: Reentrancy Protection**       | Prevent reentrancy attacks          | TC23                             | ReentrancyGuard protection                                        |
 | **UC16: Checkpoint System Integrity** | Ensure historical data accuracy     | TC25, TC31                       | Checkpoint creation and binary search                             |
 | **UC17: Global Statistics Accuracy**  | Maintain accurate global totals     | TC26                             | Total tracking and daily snapshots                                |
@@ -39,7 +39,7 @@ This matrix maps use cases to test cases and functions, ensuring comprehensive c
 | **StakingVault**   | `stakeFromClaim(address, uint128, uint16)`             | TC6, TC7, TC22                               | UC8, UC13, UC14                  | Integration, access control              |
 | **StakingVault**   | `pause()`                                              | TC8, TC10                                    | UC4, UC14                        | Admin functions, access control          |
 | **StakingVault**   | `unpause()`                                            | TC9, TC10                                    | UC5, UC14                        | Admin functions, access control          |
-| **StakingVault**   | `emergencyRecover(IERC20, uint256)`                    | TC11, TC24                                   | UC6, UC14                        | Emergency functions, access control      |
+| **StakingVault**   | `emergencyRecover(IERC20, uint256)`                    | TC11, TC12, TC24                             | UC6, UC14                        | Emergency functions, access control      |
 | **StakingStorage** | `createStake(address, bytes32, uint128, uint16, bool)` | TC1, TC6, TC24, TC25, TC26, TC27             | UC1, UC8, UC14, UC16, UC17, UC19 | Data persistence, access control         |
 | **StakingStorage** | `removeStake(bytes32)`                                 | TC2, TC24, TC25, TC26, TC27                  | UC2, UC14, UC16, UC17, UC19      | Data persistence, access control         |
 | **StakingStorage** | `getStake(address, bytes32)`                           | TC2, TC13, TC19                              | UC2, UC3, UC12                   | Data retrieval, validation               |
@@ -57,7 +57,7 @@ This matrix maps use cases to test cases and functions, ensuring comprehensive c
 
 | Security Aspect             | Test Cases                   | Contract Functions             | Attack Vectors Covered                    |
 | --------------------------- | ---------------------------- | ------------------------------ | ----------------------------------------- |
-| **Access Control**          | TC7, TC10, TC24              | All role-restricted functions  | Unauthorized access, privilege escalation |
+| **Access Control**          | TC7, TC10, TC12, TC24        | All role-restricted functions  | Unauthorized access, privilege escalation |
 | **Reentrancy Protection**   | TC23                         | `stake()`, `unstake()`         | Recursive call attacks                    |
 | **Time Lock Validation**    | TC3, TC29                    | `unstake()`, time calculations | Time manipulation, premature withdrawal   |
 | **State Management**        | TC19, TC20, TC21, TC25, TC26 | State-changing functions       | State inconsistency, data corruption      |

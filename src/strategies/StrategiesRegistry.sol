@@ -3,7 +3,7 @@
 pragma solidity ^0.8.30;
 
 import "@openzeppelin/contracts/access/AccessControl.sol";
-import "../interfaces/IStrategy.sol";
+import "../interfaces/IRewardStrategy.sol";
 
 contract StrategiesRegistry is AccessControl {
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
