@@ -18,6 +18,7 @@ contract StakingStorage is IStakingStorage, AccessControl {
 
     // Core storage mappings
     mapping(address staker => mapping(uint16 day => bytes32[])) public IDs;
+    mapping(address => bytes32[]) private _stakerStakeIds;
     mapping(address staker => mapping(bytes32 id => Stake)) private _stakes;
     mapping(address staker => StakerInfo) private _stakers;
     mapping(address staker => uint16[] checkpoints) private _stakerCheckpoints;
@@ -85,7 +86,13 @@ contract StakingStorage is IStakingStorage, AccessControl {
         _updateStakerCheckpoint(staker, today, int256(uint256(amount)));
         _updateDailySnapshot(today, int256(uint256(amount)), 1);
 
+        _stakerStakeIds[staker].push(id);
+
         emit Staked(staker, id, amount, today, daysLock, isFromClaim);
+    }
+
+    function getStakerStakeIds(address staker) external view returns (bytes32[] memory) {
+        return _stakerStakeIds[staker];
     }
 
     function removeStake(
@@ -110,6 +117,21 @@ contract StakingStorage is IStakingStorage, AccessControl {
         // Update balances and checkpoints
         _updateStakerCheckpoint(staker, today, -int256(uint256(amount)));
         _updateDailySnapshot(today, -int256(uint256(amount)), -1);
+
+        // Find the index of the stakeId in the staker's array
+        bytes32[] storage stakerStakeIds = _stakerStakeIds[staker];
+        uint256 index = stakerStakeIds.length;
+        for (uint256 i = 0; i < stakerStakeIds.length; i++) {
+            if (stakerStakeIds[i] == id) {
+                index = i;
+                break;
+            }
+        }
+        // If found, remove it using swap-and-pop
+        if (index < stakerStakeIds.length) {
+            stakerStakeIds[index] = stakerStakeIds[stakerStakeIds.length - 1];
+            stakerStakeIds.pop();
+        }
 
         emit Unstaked(staker, id, today, amount);
     }

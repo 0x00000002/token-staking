@@ -108,4 +108,6 @@ interface IStakingStorage {
     ) external view returns (address[] memory);
 
     function getTotalStakersCount() external view returns (uint256);
+
+    function getStakerStakeIds(address staker) external view returns (bytes32[] memory);
 }
