@@ -254,6 +254,12 @@ contract StakingStorage is IStakingStorage, AccessControl {
         int256 amountDelta,
         int16 countDelta
     ) internal {
+        // If we've entered a new day, copy the previous day's snapshot.
+        if (day > _currentDay) {
+            _dailySnapshots[day] = _dailySnapshots[_currentDay];
+            _currentDay = day;
+        }
+
         DailySnapshot storage snapshot = _dailySnapshots[day];
 
         if (amountDelta >= 0) {

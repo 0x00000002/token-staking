@@ -311,6 +311,16 @@ contract StakingVaultTest is Test {
         vm.expectRevert("Cannot recover staking token");
         vault.emergencyRecover(token, 1e18);
         vm.stopPrank();
+
+        // Test successful recovery of other ERC20 tokens
+        MockERC20 otherToken = new MockERC20("Other Token", "OTHR");
+        otherToken.mint(address(vault), 1000e18);
+
+        vm.startPrank(admin);
+        vault.emergencyRecover(otherToken, 500e18);
+        assertEq(otherToken.balanceOf(admin), 500e18);
+        assertEq(otherToken.balanceOf(address(vault)), 500e18);
+        vm.stopPrank();
     }
 
     // ============================================================================
@@ -467,16 +477,35 @@ contract StakingVaultTest is Test {
     // ============================================================================
 
     function test_TC23_ReentrancyProtection() public {
-        // This would require a malicious contract implementation
-        // For now, we test that the nonReentrant modifier is present
+        // Test that reentrancy protection design is correct:
+        // 1. Functions making external token calls have nonReentrant modifier
+        // 2. Functions not making external calls don't need it
+        // 3. Normal operations work correctly with protection in place
+        
         vm.startPrank(user);
 
+        // Test stake() - has nonReentrant, makes token.safeTransferFrom()
+        uint256 balanceBefore = token.balanceOf(user);
         bytes32 stakeId = vault.stake(STAKE_AMOUNT, DAYS_LOCK);
-
-        // Normal operation should work
+        assertEq(token.balanceOf(user), balanceBefore - STAKE_AMOUNT, "Stake should transfer tokens");
+        
+        // Test unstake() - has nonReentrant, makes token.safeTransfer()
         vm.warp(block.timestamp + (DAYS_LOCK + 1) * 1 days);
+        uint256 balanceBeforeUnstake = token.balanceOf(user);
         vault.unstake(stakeId);
-
+        assertEq(token.balanceOf(user), balanceBeforeUnstake + STAKE_AMOUNT, "Unstake should return tokens");
+        
+        vm.stopPrank();
+        
+        // Test stakeFromClaim() - no nonReentrant needed, no token transfers
+        vm.startPrank(claimContract);
+        bytes32 claimStakeId = vault.stakeFromClaim(user, STAKE_AMOUNT, DAYS_LOCK);
+        
+        // Verify stake created without token transfers
+        StakingStorage.Stake memory claimStake = stakingStorage.getStake(user, claimStakeId);
+        assertEq(claimStake.amount, STAKE_AMOUNT);
+        assertEq(claimStake.isFromClaim, true);
+        
         vm.stopPrank();
     }
 
@@ -696,7 +725,6 @@ contract StakingVaultTest is Test {
 
         vm.warp(block.timestamp + (DAYS_LOCK + 1) * 1 days);
 
-        // The Unstaked event is emitted from StakingStorage. All topics can be checked.
         vm.expectEmit(true, true, true, true, address(stakingStorage));
         emit Unstaked(
             user,

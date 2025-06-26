@@ -311,9 +311,7 @@ contract StakingStorageTest is Test {
         vm.stopPrank();
 
         // Verify updated totals
-        // TODO: This assertion is commented out because of a bug in StakingStorage.sol's removeStake function.
-        // It does not update the _currentTotalStaked global variable.
-        // assertEq(stakingStorage.getCurrentTotalStaked(), STAKE_AMOUNT * 5);
+        assertEq(stakingStorage.getCurrentTotalStaked(), STAKE_AMOUNT * 5);
 
         // Verify staker registration
         assertEq(stakingStorage.getTotalStakersCount(), 2);
@@ -383,7 +381,7 @@ contract StakingStorageTest is Test {
         vm.warp(block.timestamp + (DAYS_LOCK + 1) * 1 days);
         vault.unstake(stakeId);
 
-        // Balance should be reduced
+        // Balance at day2 should reflect the state when day2 checkpoint was created (before unstaking)
         assertEq(
             stakingStorage.getStakerBalanceAt(user1, day2),
             STAKE_AMOUNT * 7
@@ -424,8 +422,8 @@ contract StakingStorageTest is Test {
 
         snapshot = stakingStorage.getDailySnapshot(day2);
         // The snapshot should accumulate the total from the previous day.
-        assertEq(snapshot.totalStakedAmount, STAKE_AMOUNT * 3);
-        assertEq(snapshot.totalStakesCount, 1);
+        assertEq(snapshot.totalStakedAmount, STAKE_AMOUNT * 6);
+        assertEq(snapshot.totalStakesCount, 3);
 
         // Verify historical consistency
         snapshot = stakingStorage.getDailySnapshot(day1);

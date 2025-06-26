@@ -411,17 +411,15 @@ contract VaultStorageIntegrationTest is Test {
 
         StakingStorage.DailySnapshot memory snapshot2 = stakingStorage
             .getDailySnapshot(day2);
-        // FIXME: The assertion is changed to match the current buggy behavior.
         // The snapshot should accumulate the total from the previous day.
-        assertEq(snapshot2.totalStakedAmount, STAKE_AMOUNT * 2);
-        assertEq(snapshot2.totalStakesCount, 1);
+        assertEq(snapshot2.totalStakedAmount, STAKE_AMOUNT * 3);
+        assertEq(snapshot2.totalStakesCount, 2);
 
         StakingStorage.DailySnapshot memory snapshot3 = stakingStorage
             .getDailySnapshot(day3);
-        // FIXME: The assertion is changed to match the current buggy behavior.
         // The snapshot should accumulate the total from the previous day.
-        assertEq(snapshot3.totalStakedAmount, STAKE_AMOUNT * 3);
-        assertEq(snapshot3.totalStakesCount, 1);
+        assertEq(snapshot3.totalStakedAmount, STAKE_AMOUNT * 6);
+        assertEq(snapshot3.totalStakesCount, 3);
 
         vm.stopPrank();
     }
