@@ -8,21 +8,20 @@ import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-import "./interfaces/IStakingStorage.sol";
-import "./interfaces/IStakingVault.sol";
+import "./interfaces/staking/IStakingStorage.sol";
+import "./interfaces/staking/StakingErrors.sol";
+import {Flags} from "./lib/Flags.sol";
+import {StakingFlags} from "./StakingFlags.sol";
+import {StakingFlags} from "./StakingFlags.sol";
 
-/**
- * @title StakingVault
- * @notice Staking vault with separate data storage
- * @dev Single contract for staking logic with external storage
- */
 contract StakingVault is
-    IStakingVault,
     ReentrancyGuard,
     AccessControl,
-    Pausable
+    Pausable,
+    StakingErrors
 {
     using SafeERC20 for IERC20;
+    using Flags for uint16;
 
     bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
     bytes32 public constant CLAIM_CONTRACT_ROLE =
@@ -51,17 +50,6 @@ contract StakingVault is
     );
 
     event EmergencyRecover(address token, address to, uint256 amount);
-
-    // Errors
-    error InvalidAmount();
-    error StakeNotFound(address staker, bytes32 stakeId);
-    error StakeNotMatured(
-        bytes32 stakeId,
-        uint256 matureDay,
-        uint16 currentDay
-    );
-    error StakeAlreadyUnstaked(bytes32 stakeId);
-    error NotStakeOwner(address caller, address owner);
 
     constructor(
         IERC20 _token,
@@ -99,11 +87,8 @@ contract StakingVault is
         // Transfer tokens
         token.safeTransferFrom(staker, address(this), amount);
 
-        // Generate unique stake ID
-        stakeId = _generateStakeId(staker);
-
-        // Create stake in storage
-        stakingStorage.createStake(staker, stakeId, amount, daysLock, false);
+        // Create stake in storage and get the generated ID
+        stakeId = stakingStorage.createStake(staker, amount, daysLock, 0);
 
         emit Staked(staker, stakeId, amount, _getCurrentDay(), daysLock);
     }
@@ -130,7 +115,7 @@ contract StakingVault is
         uint256 matureDay = uint256(_stake.stakeDay) + _stake.daysLock;
         require(
             currentDay >= matureDay,
-            StakeNotMatured(stakeId, matureDay, currentDay)
+            StakeNotMatured(stakeId, currentDay, uint16(matureDay))
         );
 
         // Remove stake from storage
@@ -161,11 +146,10 @@ contract StakingVault is
     {
         require(amount > 0, InvalidAmount());
 
-        // Generate unique stake ID
-        stakeId = _generateStakeId(staker);
+        uint16 flags = Flags.set(0, StakingFlags.IS_FROM_CLAIM_BIT);
 
-        // Create stake in storage (marked as from claim)
-        stakingStorage.createStake(staker, stakeId, amount, daysLock, true);
+        // Create stake in storage and get the generated ID
+        stakeId = stakingStorage.createStake(staker, amount, daysLock, flags);
 
         emit Staked(staker, stakeId, amount, _getCurrentDay(), daysLock);
     }
@@ -197,7 +181,7 @@ contract StakingVault is
         IERC20 token_,
         uint256 amount
     ) external onlyRole(MULTISIG_ROLE) {
-        require(token_ != token, "Cannot recover staking token");
+        require(token_ != token, CannotRecoverStakingToken());
         token_.safeTransfer(msg.sender, amount);
         emit EmergencyRecover(address(token_), msg.sender, amount);
     }
@@ -208,15 +192,5 @@ contract StakingVault is
 
     function _getCurrentDay() internal view returns (uint16) {
         return uint16(block.timestamp / 1 days);
-    }
-
-    function _generateStakeId(address staker) internal view returns (bytes32) {
-        return
-            keccak256(
-                abi.encode(
-                    staker,
-                    stakingStorage.getStakerInfo(staker).stakesCounter
-                )
-            );
     }
 }

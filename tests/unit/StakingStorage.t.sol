@@ -6,6 +6,9 @@ import {StakingStorage} from "../../src/StakingStorage.sol";
 import {StakingVault} from "../../src/StakingVault.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {MockERC20} from "../helpers/MockERC20.sol";
+import {Flags} from "../../src/lib/Flags.sol";
+import {StakingFlags} from "../../src/StakingFlags.sol";
+import {StakingErrors} from "../../src/interfaces/staking/StakingErrors.sol";
 
 contract StakingStorageTest is Test {
     StakingStorage public stakingStorage;
@@ -27,7 +30,7 @@ contract StakingStorageTest is Test {
         uint128 amount,
         uint16 indexed stakeDay,
         uint16 daysLock,
-        bool isFromClaim
+        uint16 flags
     );
 
     event Unstaked(
@@ -63,9 +66,9 @@ contract StakingStorageTest is Test {
         vm.stopPrank();
 
         // Setup users with tokens
-        token.mint(user1, 10000e18);
-        token.mint(user2, 10000e18);
-        token.mint(user3, 10000e18);
+        token.mint(user1, 10_000e18);
+        token.mint(user2, 10_000e18);
+        token.mint(user3, 10_000e18);
 
         vm.startPrank(user1);
         token.approve(address(vault), type(uint256).max);
@@ -97,7 +100,7 @@ contract StakingStorageTest is Test {
         assertEq(stake.amount, STAKE_AMOUNT);
         assertEq(stake.daysLock, DAYS_LOCK);
         assertEq(stake.unstakeDay, 0);
-        assertEq(stake.isFromClaim, false);
+        assertTrue(!Flags.isSet(stake.flags, StakingFlags.IS_FROM_CLAIM_BIT)); // Not from claim
         assertEq(stake.stakeDay, uint16(block.timestamp / 1 days));
 
         vm.stopPrank();
@@ -250,7 +253,7 @@ contract StakingStorageTest is Test {
 
         // Test out of bounds
         vm.expectRevert(
-            abi.encodeWithSelector(StakingStorage.OutOfBounds.selector, 3, 5)
+            abi.encodeWithSelector(StakingErrors.OutOfBounds.selector, 3, 5)
         );
         stakingStorage.getStakersPaginated(5, 1);
     }
@@ -440,7 +443,7 @@ contract StakingStorageTest is Test {
     function test_StakeNotFound() public {
         vm.expectRevert(
             abi.encodeWithSelector(
-                StakingStorage.StakeNotFound.selector,
+                StakingErrors.StakeNotFound.selector,
                 user1,
                 bytes32(0)
             )
@@ -448,31 +451,25 @@ contract StakingStorageTest is Test {
         stakingStorage.getStake(user1, bytes32(0));
     }
 
-    function test_StakeAlreadyExists() public {
+    function test_StakeIdUniqueness() public {
         vm.startPrank(address(vault));
 
-        bytes32 stakeId = keccak256(abi.encode(user1, 0));
-        stakingStorage.createStake(
+        // Test that creating multiple stakes for the same user generates different IDs
+        bytes32 stakeId1 = stakingStorage.createStake(
             user1,
-            stakeId,
             STAKE_AMOUNT,
             DAYS_LOCK,
-            false
+            0
         );
 
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                StakingStorage.StakeAlreadyExists.selector,
-                stakeId
-            )
-        );
-        stakingStorage.createStake(
+        bytes32 stakeId2 = stakingStorage.createStake(
             user1,
-            stakeId,
             STAKE_AMOUNT,
             DAYS_LOCK,
-            false
+            0
         );
+
+        assertTrue(stakeId1 != stakeId2, "Stake IDs should be unique");
 
         vm.stopPrank();
     }
@@ -491,7 +488,7 @@ contract StakingStorageTest is Test {
         vm.startPrank(address(vault)); // Prank as the vault contract
         vm.expectRevert(
             abi.encodeWithSelector(
-                StakingStorage.StakeAlreadyUnstaked.selector,
+                StakingErrors.StakeAlreadyUnstaked.selector,
                 stakeId
             )
         );
@@ -564,15 +561,12 @@ contract StakingStorageTest is Test {
     function test_TC41_CreateStake_ZeroAddressStaker() public {
         vm.startPrank(address(vault)); // Has CONTROLLER_ROLE
 
-        bytes32 stakeId = keccak256(abi.encode(address(0), 0));
-
         // The current implementation allows staking for address(0). This test verifies that behavior.
-        stakingStorage.createStake(
+        bytes32 stakeId = stakingStorage.createStake(
             address(0),
-            stakeId,
             STAKE_AMOUNT,
             DAYS_LOCK,
-            false
+            0
         );
 
         StakingStorage.Stake memory stake = stakingStorage.getStake(

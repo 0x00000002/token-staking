@@ -1,6 +1,6 @@
-# Token Staking: Contract Specifications
+# Token Staking System: Contract Specifications
 
-This document provides definitive technical specifications for the Token staking system contracts, including all functions, events, errors, and data structures. For design rationale and security analysis, see the [System Architecture](audit/system_architecture.md) document.
+This document provides comprehensive technical specifications for the Token staking system contracts, including all functions, events, errors, and data structures across both the core staking system and reward management components.
 
 ## StakingVault.sol
 
@@ -52,14 +52,14 @@ This document provides definitive technical specifications for the Token staking
 
 ### Data Structures
 
-- `Stake { uint128 amount, uint16 stakeDay, uint16 unstakeDay, uint16 daysLock, bool isFromClaim }`
+- `Stake { uint128 amount, uint16 stakeDay, uint16 unstakeDay, uint16 daysLock, uint16 flags }`
 - `StakerInfo { uint128 totalStaked, uint128 totalRewarded, uint128 totalClaimed, uint32 stakesCounter, uint32 activeStakesNumber, uint16 lastCheckpointDay }`
 - `DailySnapshot { uint128 totalStakedAmount, uint16 totalStakesCount }`
 
 ### Functions
 
-- `createStake(address staker, bytes32 id, uint128 amount, uint16 daysLock, bool isFromClaim)`: Creates a new stake record. Access: `CONTROLLER_ROLE`.
-- `removeStake(bytes32 id)`: Marks a stake as unstaked. Access: `CONTROLLER_ROLE`.
+- `createStake(address staker, uint128 amount, uint16 daysLock, uint16 flags)`: Creates a new stake record. Access: `CONTROLLER_ROLE`.
+- `removeStake(address staker, bytes32 id)`: Marks a stake as unstaked. Access: `CONTROLLER_ROLE`.
 - `getStake(address staker, bytes32 id) returns (Stake memory)`: Retrieves a specific stake.
 - `getStakerInfo(address staker) returns (StakerInfo memory)`: Retrieves information about a staker.
 - `getStakerBalanceAt(address staker, uint16 targetDay) returns (uint128)`: Retrieves a staker's historical balance using binary search.
@@ -70,7 +70,7 @@ This document provides definitive technical specifications for the Token staking
 
 ### Events
 
-- `Staked(address indexed staker, bytes32 indexed id, uint128 amount, uint16 indexed day, uint16 daysLock, bool isFromClaim)`
+- `Staked(address indexed staker, bytes32 indexed id, uint128 amount, uint16 indexed day, uint16 daysLock, uint16 flags)`
 - `Unstaked(address indexed staker, bytes32 indexed id, uint16 indexed day, uint128 amount)`
 - `CheckpointCreated(address indexed staker, uint16 indexed day, uint128 balance, uint16 stakesCount)`
 

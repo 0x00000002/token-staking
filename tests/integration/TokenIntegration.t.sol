@@ -6,6 +6,9 @@ import {StakingVault} from "../../src/StakingVault.sol";
 import {StakingStorage} from "../../src/StakingStorage.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {MockERC20} from "../helpers/MockERC20.sol";
+import {Flags} from "../../src/lib/Flags.sol";
+import {StakingFlags} from "../../src/StakingFlags.sol";
+import {StakingErrors} from "../../src/interfaces/staking/StakingErrors.sol";
 
 contract TokenIntegrationTest is Test {
     StakingVault public vault;
@@ -42,8 +45,8 @@ contract TokenIntegrationTest is Test {
         vm.stopPrank();
 
         // Setup users with tokens
-        token.mint(user, 10000e18);
-        token.mint(address(vault), 10000e18);
+        token.mint(user, 10_000e18);
+        token.mint(address(vault), 10_000e18);
 
         vm.startPrank(user);
         token.approve(address(vault), type(uint256).max);
@@ -155,7 +158,9 @@ contract TokenIntegrationTest is Test {
         // Test with zero amount
         token.approve(address(vault), type(uint256).max);
 
-        vm.expectRevert(StakingVault.InvalidAmount.selector);
+        vm.expectRevert(
+            abi.encodeWithSelector(StakingErrors.InvalidAmount.selector)
+        );
         vault.stake(0, DAYS_LOCK);
 
         // Test with valid amount
@@ -184,7 +189,7 @@ contract TokenIntegrationTest is Test {
             stakeId
         );
         assertEq(stake.amount, STAKE_AMOUNT);
-        assertEq(stake.isFromClaim, true);
+        assertTrue(Flags.isSet(stake.flags, StakingFlags.IS_FROM_CLAIM_BIT));
 
         // Unstake and verify token transfer
         vm.warp(block.timestamp + (DAYS_LOCK + 1) * 1 days);
@@ -201,7 +206,7 @@ contract TokenIntegrationTest is Test {
     function test_TC28_EmergencyTokenRecovery() public {
         // This test verifies that the main staking token CANNOT be recovered.
         vm.prank(admin);
-        vm.expectRevert("Cannot recover staking token");
+        vm.expectRevert(StakingErrors.CannotRecoverStakingToken.selector);
         vault.emergencyRecover(token, 1e18);
     }
 }

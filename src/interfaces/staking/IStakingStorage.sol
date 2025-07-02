@@ -12,7 +12,7 @@ interface IStakingStorage {
         uint16 stakeDay;
         uint16 unstakeDay;
         uint16 daysLock;
-        bool isFromClaim;
+        uint16 flags; // 2 bytes - pack multiple booleans
     }
 
     struct StakerInfo {
@@ -36,7 +36,7 @@ interface IStakingStorage {
         uint128 amount,
         uint16 indexed stakeDay,
         uint16 daysLock,
-        bool isFromClaim
+        uint16 flags
     );
 
     event Unstaked(
@@ -56,16 +56,12 @@ interface IStakingStorage {
     // Stake Management
     function createStake(
         address staker,
-        bytes32 stakeId,
         uint128 amount,
         uint16 daysLock,
-        bool isFromClaim
-    ) external;
+        uint16 flags
+    ) external returns (bytes32 stakeId);
 
-    function removeStake(
-        address staker,
-        bytes32 stakeId
-    ) external;
+    function removeStake(address staker, bytes32 stakeId) external;
 
     function getStake(
         address staker,
@@ -109,5 +105,7 @@ interface IStakingStorage {
 
     function getTotalStakersCount() external view returns (uint256);
 
-    function getStakerStakeIds(address staker) external view returns (bytes32[] memory);
+    function getStakerStakeIds(
+        address staker
+    ) external view returns (bytes32[] memory);
 }

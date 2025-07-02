@@ -48,7 +48,7 @@ export RPC_URL=https://sepolia.infura.io/v3/**********
 export DEPLOYER_PK=0x42aa06dc8c320e0255df8d95494f6a7b66e10fa30919a24ad910a6c2bdbcc8ee
 export ADMIN=0xeb24a849E6C908D4166D34D7E3133B452CB627D2
 export MANAGER=0x1Fb0E85b7Ba55F0384d0E06D81DF915aeb3baca3
-export MULTISIG=0x... # Address for the separate, secure multisig wallet
+export MULTISIG=0x... # Address for the separate, secure multisig wallet (granted separately after deployment)
 export TOKEN=0x....
 export ETHERSCAN_API_KEY=
 ```
@@ -105,7 +105,7 @@ forge verify-contract $STAKING_STORAGE \
 ```sh
 forge create --broadcast ./src/StakingVault.sol:StakingVault --rpc-url $RPC_URL \
   --private-key $DEPLOYER_PK \
-  --constructor-args $TOKEN $STAKING_STORAGE $ADMIN $MANAGER $MULTISIG
+  --constructor-args $TOKEN $STAKING_STORAGE $ADMIN $MANAGER
 ```
 
 Set the vault address: `export STAKING_VAULT=0x....`
@@ -120,7 +120,7 @@ forge verify-contract $STAKING_VAULT \
   --num-of-optimizations 200 \
   --watch \
   --etherscan-api-key $ETHERSCAN_API_KEY \
-  --constructor-args $(cast abi-encode "constructor(address,address,address,address,address)" $TOKEN $STAKING_STORAGE $ADMIN $MANAGER $MULTISIG)
+  --constructor-args $(cast abi-encode "constructor(address,address,address,address)" $TOKEN $STAKING_STORAGE $ADMIN $MANAGER)
 ```
 
 #### Setup Roles
@@ -130,6 +130,14 @@ Grant CONTROLLER_ROLE to vault in storage contract:
 ```bash
 cast send $STAKING_STORAGE "grantRole(bytes32,address)" \
   0x7b765e0e932d348852a6f810bfa1ab891615cb53504089c3e26b8c96ca14c3d5 $STAKING_VAULT \
+  --rpc-url $RPC_URL --private-key $DEPLOYER_PK
+```
+
+Grant MULTISIG_ROLE to secure multisig wallet:
+
+```bash
+cast send $STAKING_VAULT "grantRole(bytes32,address)" \
+  0xa5a0b70b385ff7611cd3840916bd08b10829e5bf9e6637cf79dd9a427fc0e2ab $MULTISIG \
   --rpc-url $RPC_URL --private-key $DEPLOYER_PK
 ```
 

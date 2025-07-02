@@ -8,6 +8,9 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {MockERC20} from "../helpers/MockERC20.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
+import {Flags} from "../../src/lib/Flags.sol";
+import {StakingFlags} from "../../src/StakingFlags.sol";
+import {StakingErrors} from "../../src/interfaces/staking/StakingErrors.sol";
 
 contract StakingVaultTest is Test {
     StakingVault public vault;
@@ -29,7 +32,7 @@ contract StakingVaultTest is Test {
         uint128 amount,
         uint16 indexed stakeDay,
         uint16 daysLock,
-        bool isFromClaim
+        uint16 flags
     );
 
     event Unstaked(
@@ -63,8 +66,8 @@ contract StakingVaultTest is Test {
         user = address(0x1234567890123456789012345678901234567890);
 
         // Setup user with tokens
-        token.mint(user, 10000e18);
-        token.mint(claimContract, 10000e18);
+        token.mint(user, 10_000e18);
+        token.mint(claimContract, 10_000e18);
 
         vm.startPrank(user);
         token.approve(address(vault), type(uint256).max);
@@ -98,7 +101,7 @@ contract StakingVaultTest is Test {
         assertEq(stake.amount, STAKE_AMOUNT);
         assertEq(stake.daysLock, DAYS_LOCK);
         assertEq(stake.unstakeDay, 0);
-        assertEq(stake.isFromClaim, false);
+        assertFalse(Flags.isSet(stake.flags, StakingFlags.IS_FROM_CLAIM_BIT)); // Not from claim
 
         // Verify staker info
         StakingStorage.StakerInfo memory info = stakingStorage.getStakerInfo(
@@ -181,10 +184,10 @@ contract StakingVaultTest is Test {
 
         vm.expectRevert(
             abi.encodeWithSelector(
-                StakingVault.StakeNotMatured.selector,
+                StakingErrors.StakeNotMatured.selector,
                 stakeId,
-                expectedMatureDay,
-                uint16(block.timestamp / 1 days)
+                uint16(block.timestamp / 1 days),
+                expectedMatureDay
             )
         );
         vault.unstake(stakeId);
@@ -214,7 +217,9 @@ contract StakingVaultTest is Test {
     function test_TC5_FailedStakingZeroAmount() public {
         vm.startPrank(user);
 
-        vm.expectRevert(StakingVault.InvalidAmount.selector);
+        vm.expectRevert(
+            abi.encodeWithSelector(StakingErrors.InvalidAmount.selector)
+        );
         vault.stake(0, DAYS_LOCK);
 
         vm.stopPrank();
@@ -236,7 +241,7 @@ contract StakingVaultTest is Test {
         );
         assertEq(stake.amount, STAKE_AMOUNT);
         assertEq(stake.daysLock, DAYS_LOCK);
-        assertEq(stake.isFromClaim, true);
+        assertTrue(Flags.isSet(stake.flags, StakingFlags.IS_FROM_CLAIM_BIT));
 
         // Verify staker info
         StakingStorage.StakerInfo memory info = stakingStorage.getStakerInfo(
@@ -308,7 +313,7 @@ contract StakingVaultTest is Test {
     function test_TC11_EmergencyTokenRecovery() public {
         // This test now verifies that the main staking token CANNOT be recovered.
         vm.startPrank(admin); // Any user with MULTISIG_ROLE
-        vm.expectRevert("Cannot recover staking token");
+        vm.expectRevert(StakingErrors.CannotRecoverStakingToken.selector);
         vault.emergencyRecover(token, 1e18);
         vm.stopPrank();
 
@@ -425,7 +430,7 @@ contract StakingVaultTest is Test {
         // Second unstake should fail with the appropriate error from the storage contract
         vm.expectRevert(
             abi.encodeWithSelector(
-                StakingStorage.StakeAlreadyUnstaked.selector,
+                StakingErrors.StakeAlreadyUnstaked.selector,
                 stakeId
             )
         );
@@ -481,31 +486,46 @@ contract StakingVaultTest is Test {
         // 1. Functions making external token calls have nonReentrant modifier
         // 2. Functions not making external calls don't need it
         // 3. Normal operations work correctly with protection in place
-        
+
         vm.startPrank(user);
 
         // Test stake() - has nonReentrant, makes token.safeTransferFrom()
         uint256 balanceBefore = token.balanceOf(user);
         bytes32 stakeId = vault.stake(STAKE_AMOUNT, DAYS_LOCK);
-        assertEq(token.balanceOf(user), balanceBefore - STAKE_AMOUNT, "Stake should transfer tokens");
-        
+        assertEq(
+            token.balanceOf(user),
+            balanceBefore - STAKE_AMOUNT,
+            "Stake should transfer tokens"
+        );
+
         // Test unstake() - has nonReentrant, makes token.safeTransfer()
         vm.warp(block.timestamp + (DAYS_LOCK + 1) * 1 days);
         uint256 balanceBeforeUnstake = token.balanceOf(user);
         vault.unstake(stakeId);
-        assertEq(token.balanceOf(user), balanceBeforeUnstake + STAKE_AMOUNT, "Unstake should return tokens");
-        
+        assertEq(
+            token.balanceOf(user),
+            balanceBeforeUnstake + STAKE_AMOUNT,
+            "Unstake should return tokens"
+        );
+
         vm.stopPrank();
-        
+
         // Test stakeFromClaim() - no nonReentrant needed, no token transfers
         vm.startPrank(claimContract);
-        bytes32 claimStakeId = vault.stakeFromClaim(user, STAKE_AMOUNT, DAYS_LOCK);
-        
+        bytes32 claimStakeId = vault.stakeFromClaim(
+            user,
+            STAKE_AMOUNT,
+            DAYS_LOCK
+        );
+
         // Verify stake created without token transfers
-        StakingStorage.Stake memory claimStake = stakingStorage.getStake(user, claimStakeId);
+        StakingStorage.Stake memory claimStake = stakingStorage.getStake(
+            user,
+            claimStakeId
+        );
         assertEq(claimStake.amount, STAKE_AMOUNT);
-        assertEq(claimStake.isFromClaim, true);
-        
+        assertTrue(Flags.isSet(claimStake.flags, StakingFlags.IS_FROM_CLAIM_BIT));
+
         vm.stopPrank();
     }
 
@@ -520,10 +540,9 @@ contract StakingVaultTest is Test {
         vm.expectRevert(); // AccessControl error
         stakingStorage.createStake(
             user,
-            bytes32(0),
             STAKE_AMOUNT,
             DAYS_LOCK,
-            false
+            0 // No flags set
         );
 
         // Try emergency recovery without admin role
@@ -612,30 +631,25 @@ contract StakingVaultTest is Test {
     function test_TC34_StakingStorageDirectFunctions() public {
         vm.startPrank(address(vault)); // Has CONTROLLER_ROLE
 
-        bytes32 stakeId = keccak256(abi.encode(user, 0));
-
         // Test successful creation
-        stakingStorage.createStake(
+        bytes32 generatedStakeId = stakingStorage.createStake(
             user,
-            stakeId,
             STAKE_AMOUNT,
             DAYS_LOCK,
-            false
+            0 // No flags set
         );
 
-        // Test duplicate prevention
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                StakingStorage.StakeAlreadyExists.selector,
-                stakeId
-            )
-        );
-        stakingStorage.createStake(
+        // Test that attempting to create another stake with the same user generates a different ID
+        // (since stakesCounter has incremented)
+        bytes32 secondStakeId = stakingStorage.createStake(
             user,
-            stakeId,
             STAKE_AMOUNT,
             DAYS_LOCK,
-            false
+            0 // No flags set
+        );
+        assertTrue(
+            generatedStakeId != secondStakeId,
+            "StakeIds should be different"
         );
 
         vm.stopPrank();
@@ -645,10 +659,9 @@ contract StakingVaultTest is Test {
         vm.expectRevert(); // AccessControl error
         stakingStorage.createStake(
             user,
-            bytes32(0),
             STAKE_AMOUNT,
             DAYS_LOCK,
-            false
+            0 // No flags set
         );
         vm.stopPrank();
     }
@@ -684,7 +697,7 @@ contract StakingVaultTest is Test {
         vm.startPrank(user);
 
         // Test day boundary transitions
-        uint256 dayBoundary = (block.timestamp / 1 days) * 1 days + 86399; // 1 second before next day
+        uint256 dayBoundary = (block.timestamp / 1 days) * 1 days + 86_399; // 1 second before next day
         vm.warp(dayBoundary);
 
         bytes32 stakeId = vault.stake(STAKE_AMOUNT, DAYS_LOCK);
@@ -718,7 +731,7 @@ contract StakingVaultTest is Test {
             STAKE_AMOUNT,
             uint16(block.timestamp / 1 days),
             DAYS_LOCK,
-            false
+            uint16(0)
         );
 
         bytes32 stakeId = vault.stake(STAKE_AMOUNT, DAYS_LOCK);

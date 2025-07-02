@@ -2,13 +2,21 @@
 
 ## Overview
 
-This document defines use cases for the STAKING SUBSYSTEM ONLY. The reward system is under development and excluded from current audit scope.
+This document defines use cases for the complete Token Staking System, including both the core staking subsystem and the comprehensive reward management system.
 
-## Core Staking System Components
+## System Components
 
+### Core Staking System
 - **StakingVault.sol**: Business logic and user interface contract
-- **StakingStorage.sol**: Data persistence and historical tracking contract
+- **StakingStorage.sol**: Data persistence and historical tracking contract  
 - **Token.sol**: Simple ERC20 test token
+
+### Reward Management System
+- **RewardManager.sol**: Central reward calculation and distribution orchestration
+- **EpochManager.sol**: Epoch lifecycle management (announced → active → ended → calculated)
+- **StrategiesRegistry.sol**: Reward strategy registration and management
+- **GrantedRewardStorage.sol**: Reward grant tracking and claiming state management
+- **Strategy Implementations**: LinearAPRStrategy, EpochPoolStrategy for different reward models
 
 ## User Use Cases
 
@@ -30,8 +38,8 @@ This document defines use cases for the STAKING SUBSYSTEM ONLY. The reward syste
 
 1. User calls `StakingVault.stake(uint128 amount, uint16 daysLock)`
 2. Vault validates parameters and transfers tokens from user
-3. Vault generates unique stake ID: `keccak256(abi.encode(staker, stakesCount))`
-4. Vault calls `StakingStorage.createStake(staker, stakeId, amount, daysLock, false)`
+3. Vault generates unique stake ID using compound key: `bytes32((uint256(uint160(staker)) << 96) | stakesCounter)`
+4. Vault calls `StakingStorage.createStake(staker, amount, daysLock, flags)`
 5. Storage creates stake record and updates checkpoints
 
 **Postconditions**:
@@ -97,6 +105,25 @@ This document defines use cases for the STAKING SUBSYSTEM ONLY. The reward syste
 - Returns accurate stake and balance information
 - No state changes
 
+### UC20: Stake Flag System Operations
+
+**Actor**: System  
+**Description**: Manage stake flags for tracking properties and origins  
+**Contracts**: StakingStorage, Flags library
+
+**Available Operations**:
+
+- Flag validation using `Flags.isSet(flags, bit)` for stake properties
+- Origin tracking via IS_FROM_CLAIM_BIT for reward eligibility
+- Flag-based filtering for analytics and reward calculations
+- Extensible design supports future flag additions
+
+**Postconditions**:
+
+- Stake origins are accurately tracked for reward distribution
+- Flag queries return correct boolean values for business logic
+- System supports extensible stake property management
+
 ## Manager Role Use Cases
 
 ### UC4: Pause System
@@ -153,7 +180,7 @@ This document defines use cases for the STAKING SUBSYSTEM ONLY. The reward syste
 
 **Preconditions**:
 
-- Actor has DEFAULT_ADMIN_ROLE
+- Actor has MULTISIG_ROLE
 - Contract has sufficient token balance
 - Amount is greater than zero
 - Destination address is valid
@@ -260,9 +287,163 @@ This document defines use cases for the STAKING SUBSYSTEM ONLY. The reward syste
 - Returns paginated list of staker addresses
 - No state changes
 
+## Reward System Use Cases
+
+### UC21: Reward Strategy Management
+
+**Actor**: Admin (ADMIN_ROLE)  
+**Description**: Register and manage reward calculation strategies  
+**Contract**: StrategiesRegistry
+
+**Available Operations**:
+
+- Register new strategies (`registerStrategy()`)
+- Activate/deactivate strategies (`setStrategyStatus()`)
+- Update strategy versions (`updateStrategyVersion()`)
+- Query active strategies by type
+
+**Strategy Types**:
+
+- **Immediate**: APR-style continuous rewards (LinearAPRStrategy)
+- **Epoch-Based**: Fixed pool distributions (EpochPoolStrategy)
+
+**Postconditions**:
+
+- Strategies are properly registered and validated
+- Active strategies are available for reward calculations
+- Access control prevents unauthorized modifications
+
+### UC22: Epoch Lifecycle Management
+
+**Actor**: Admin (ADMIN_ROLE)  
+**Description**: Manage epoch states from announcement to finalization  
+**Contract**: EpochManager
+
+**Epoch Flow**:
+
+1. **ANNOUNCED**: `announceEpoch()` with parameters and pool estimates
+2. **ACTIVE**: Automatic transition when startDay reached
+3. **ENDED**: Automatic transition when endDay passed  
+4. **CALCULATED**: `finalizeEpoch()` with final statistics
+
+**Key Functions**:
+
+- `updateEpochStates()`: Process automatic state transitions
+- `setEpochPoolSize()`: Set actual reward pool after epoch ends
+- `getActiveEpochs()`: Query currently active epochs
+
+**Postconditions**:
+
+- Epochs progress through proper state machine
+- Reward pools are correctly managed and tracked
+- Multiple concurrent epochs are supported
+
+### UC23: Immediate Reward Processing
+
+**Actor**: Admin (ADMIN_ROLE)  
+**Description**: Calculate and grant APR-style rewards  
+**Contract**: RewardManager
+
+**Process Flow**:
+
+1. Admin calls `calculateImmediateRewards()` with strategy and time range
+2. System fetches stakers via pagination for gas efficiency
+3. For each staker, strategy determines stake applicability
+4. Calculate historical rewards for specified time period
+5. Grant rewards to GrantedRewardStorage
+
+**Features**:
+
+- Batch processing for scalability
+- Strategy-based filtering and calculations
+- Integration with historical staking data
+- Gas-efficient pagination
+
+**Postconditions**:
+
+- Eligible stakers receive accurate APR rewards
+- Calculations are transparent and auditable
+- System scales with large user bases
+
+### UC24: Epoch Reward Distribution
+
+**Actor**: Admin (ADMIN_ROLE)  
+**Description**: Distribute pool rewards proportionally  
+**Contract**: RewardManager, EpochManager
+
+**Distribution Logic**:
+
+- User weight = Σ(stake_amount × effective_days_in_epoch)
+- User share = user_weight / total_epoch_weight  
+- User reward = user_share × epoch_pool_size
+
+**Process Flow**:
+
+1. Validate epoch is in CALCULATED state
+2. Calculate participation weights using staking history
+3. Distribute pool proportionally via `calculateEpochRewards()`
+4. Record rewards in GrantedRewardStorage
+
+**Postconditions**:
+
+- Pool rewards distributed mathematically accurately
+- Participation properly weighted by stake amount and duration
+- Rewards ready for user claiming
+
+### UC25: Reward Claiming
+
+**Actor**: User  
+**Description**: Claim accumulated rewards through various methods  
+**Contract**: RewardManager
+
+**Claiming Options**:
+
+- `claimAllRewards()`: Claim all available rewards
+- `claimSpecificRewards()`: Claim selected rewards by indices
+- `claimEpochRewards()`: Claim rewards from specific epoch
+
+**Security Features**:
+
+- Ownership validation for all claims
+- Reentrancy protection on claiming functions
+- Double-claiming prevention mechanisms
+- Comprehensive event emission
+
+**Postconditions**:
+
+- Users receive earned reward tokens
+- Claimed rewards marked as processed
+- Accurate state updates prevent double-claiming
+
+### UC26: Reward Storage Management
+
+**Actor**: System (CONTROLLER_ROLE)  
+**Description**: Track and manage all granted rewards  
+**Contract**: GrantedRewardStorage
+
+**Core Functions**:
+
+- `grantReward()`: Record new reward grants with strategy/epoch tracking
+- `getUserRewards()`: Complete user reward history with pagination
+- `getUserClaimableAmount()`: Calculate total available rewards
+- Claiming index optimization for gas efficiency
+
+**Data Integrity**:
+
+- Immutable reward grant records
+- Complete audit trail for transparency
+- Mathematical precision in all calculations
+- Efficient storage for large datasets
+
+**Postconditions**:
+
+- All rewards accurately tracked with complete history
+- Claiming operations maintain data integrity
+- System supports analytics and auditing requirements
+
 ## Error Handling Use Cases
 
-### UC11: Immature Stake Unstaking
+### UC27: Immature Stake Unstaking
 
 **Actor**: System  
 **Description**: Reject unstaking attempts before time lock expires
@@ -284,7 +465,7 @@ This document defines use cases for the STAKING SUBSYSTEM ONLY. The reward syste
 - No tokens are transferred
 - No state is modified
 
-### UC12: Invalid Stake Operations
+### UC28: Invalid Stake Operations
 
 **Actor**: System  
 **Description**: Handle various invalid stake operations
@@ -302,7 +483,7 @@ This document defines use cases for the STAKING SUBSYSTEM ONLY. The reward syste
 - No tokens are transferred
 - No state is modified
 
-### UC13: Paused System Operations
+### UC29: Paused System Operations
 
 **Actor**: System  
 **Description**: Reject stake/unstake operations when system is paused
@@ -319,7 +500,7 @@ This document defines use cases for the STAKING SUBSYSTEM ONLY. The reward syste
 
 ## Security Validation Use Cases
 
-### UC14: Access Control Enforcement
+### UC30: Access Control Enforcement
 
 **Actor**: System  
 **Description**: Ensure only authorized roles can perform restricted operations
@@ -336,7 +517,7 @@ This document defines use cases for the STAKING SUBSYSTEM ONLY. The reward syste
 - Unauthorized operations revert with access control error
 - Authorized operations proceed normally
 
-### UC15: Reentrancy Protection
+### UC31: Reentrancy Protection
 
 **Actor**: System  
 **Description**: Prevent reentrancy attacks during external token calls
@@ -354,7 +535,7 @@ This document defines use cases for the STAKING SUBSYSTEM ONLY. The reward syste
 
 ## Data Integrity Use Cases
 
-### UC16: Checkpoint System Integrity
+### UC32: Checkpoint System Integrity
 
 **Actor**: System  
 **Description**: Ensure checkpoint system maintains accurate historical data
@@ -372,7 +553,7 @@ This document defines use cases for the STAKING SUBSYSTEM ONLY. The reward syste
 - Queries are efficient (O(log n))
 - Data integrity is maintained
 
-### UC17: Global Statistics Accuracy
+### UC33: Global Statistics Accuracy
 
 **Actor**: System  
 **Description**: Ensure global statistics remain accurate across all operations
@@ -391,7 +572,7 @@ This document defines use cases for the STAKING SUBSYSTEM ONLY. The reward syste
 
 ## Integration Requirements
 
-### UC18: Token Integration
+### UC34: Token Integration
 
 **Actor**: System  
 **Description**: Ensure proper ERC20 token integration
@@ -408,7 +589,7 @@ This document defines use cases for the STAKING SUBSYSTEM ONLY. The reward syste
 - Balance checks are accurate
 - No token-related vulnerabilities
 
-### UC19: Storage-Vault Integration
+### UC35: Storage-Vault Integration
 
 **Actor**: System  
 **Description**: Ensure proper integration between StakingVault and StakingStorage
@@ -429,22 +610,34 @@ This document defines use cases for the STAKING SUBSYSTEM ONLY. The reward syste
 
 ## Notes for Auditors
 
-1. **Reward System Excluded**: This audit focuses solely on the staking subsystem. Reward contracts are incomplete and should be excluded.
+1. **Complete System Coverage**: This audit covers both the core staking subsystem (UC1-UC20, UC27-UC35) and the comprehensive reward management system (UC21-UC26).
 
 2. **Key Security Areas**:
 
+   **Core Staking**:
    - Time lock validation logic
    - Access control enforcement
    - Reentrancy protection
    - Historical data integrity
 
+   **Reward System**:
+   - Mathematical precision in reward calculations
+   - Access control for admin functions
+   - Reentrancy protection in claiming
+   - Strategy validation and security
+
 3. **Critical Functions**:
 
-   - `StakingVault.stake()`
-   - `StakingVault.unstake()`
-   - `StakingStorage.createStake()`
-   - `StakingStorage.removeStake()`
-   - Historical query functions
+   **Core Staking**:
+   - `StakingVault.stake()` / `StakingVault.unstake()`
+   - `StakingStorage.createStake()` / `StakingStorage.removeStake()`
+   - Historical query functions with binary search
+
+   **Reward System**:
+   - `RewardManager.calculateImmediateRewards()` / `calculateEpochRewards()`
+   - `RewardManager.claimAllRewards()` and claiming variants
+   - `EpochManager.announceEpoch()` / `finalizeEpoch()`
+   - Strategy registration and management functions
 
 4. **Gas Optimization**: Binary search implementation in checkpoint system for efficient historical queries.
 
