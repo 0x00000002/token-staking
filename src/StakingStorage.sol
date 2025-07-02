@@ -19,8 +19,7 @@ contract StakingStorage is IStakingStorage, AccessControl, StakingErrors {
 
     // Core storage mappings
     mapping(address staker => mapping(uint16 day => bytes32[])) public IDs;
-    mapping(address => bytes32[]) private _stakerStakeIds;
-    mapping(address staker => mapping(bytes32 id => Stake)) private _stakes;
+    mapping(bytes32 id => Stake) private _stakes;
     mapping(address staker => StakerInfo) private _stakers;
     mapping(address staker => uint16[] checkpoints) private _stakerCheckpoints;
     mapping(address staker => mapping(uint16 => uint128))
@@ -55,10 +54,10 @@ contract StakingStorage is IStakingStorage, AccessControl, StakingErrors {
 
         id = _generateStakeId(staker, counter);
 
-        require(_stakes[staker][id].amount == 0, StakeAlreadyExists(id));
+        require(_stakes[id].amount == 0, StakeAlreadyExists(id));
 
         // Create stake
-        _stakes[staker][id] = Stake({
+        _stakes[id] = Stake({
             amount: amount,
             stakeDay: today,
             unstakeDay: 0,
@@ -83,7 +82,6 @@ contract StakingStorage is IStakingStorage, AccessControl, StakingErrors {
         _updateStakerCheckpoint(staker, today, int256(uint256(amount)));
         _updateDailySnapshot(today, int256(uint256(amount)), 1);
 
-        _stakerStakeIds[staker].push(id);
 
         emit Staked(staker, id, amount, today, daysLock, flags);
     }
@@ -91,14 +89,24 @@ contract StakingStorage is IStakingStorage, AccessControl, StakingErrors {
     function getStakerStakeIds(
         address staker
     ) external view returns (bytes32[] memory) {
-        return _stakerStakeIds[staker];
+        uint32 counter = _stakers[staker].stakesCounter;
+        bytes32[] memory stakeIds = new bytes32[](counter);
+        
+        for (uint32 i = 0; i < counter; i++) {
+            stakeIds[i] = _generateStakeId(staker, i);
+        }
+        
+        return stakeIds;
     }
 
     function removeStake(
         address staker,
         bytes32 id
     ) external onlyRole(CONTROLLER_ROLE) {
-        Stake storage stake = _stakes[staker][id];
+        Stake storage stake = _stakes[id];
+        
+        // Validate stake belongs to the staker
+        require(_getStakerFromId(id) == staker, NotStakeOwner(staker, _getStakerFromId(id)));
 
         require(stake.amount > 0, StakeNotFound(staker, id));
         require(stake.unstakeDay == 0, StakeAlreadyUnstaked(id));
@@ -117,20 +125,6 @@ contract StakingStorage is IStakingStorage, AccessControl, StakingErrors {
         _updateStakerCheckpoint(staker, today, -int256(uint256(amount)));
         _updateDailySnapshot(today, -int256(uint256(amount)), -1);
 
-        // Find the index of the stakeId in the staker's array
-        bytes32[] storage stakerStakeIds = _stakerStakeIds[staker];
-        uint256 index = stakerStakeIds.length;
-        for (uint256 i = 0; i < stakerStakeIds.length; i++) {
-            if (stakerStakeIds[i] == id) {
-                index = i;
-                break;
-            }
-        }
-        // If found, remove it using swap-and-pop
-        if (index < stakerStakeIds.length) {
-            stakerStakeIds[index] = stakerStakeIds[stakerStakeIds.length - 1];
-            stakerStakeIds.pop();
-        }
 
         emit Unstaked(staker, id, today, amount);
     }
@@ -139,8 +133,10 @@ contract StakingStorage is IStakingStorage, AccessControl, StakingErrors {
         address staker,
         bytes32 id
     ) external view returns (Stake memory) {
-        Stake memory stake = _stakes[staker][id];
+        Stake memory stake = _stakes[id];
         require(stake.amount > 0, StakeNotFound(staker, id));
+        // Validate stake belongs to the staker
+        require(_getStakerFromId(id) == staker, NotStakeOwner(staker, _getStakerFromId(id)));
         return stake;
     }
 
@@ -148,7 +144,9 @@ contract StakingStorage is IStakingStorage, AccessControl, StakingErrors {
         address staker,
         bytes32 id
     ) external view returns (bool) {
-        Stake memory stake = _stakes[staker][id];
+        Stake memory stake = _stakes[id];
+        // Validate stake belongs to the staker
+        require(_getStakerFromId(id) == staker, NotStakeOwner(staker, _getStakerFromId(id)));
         return stake.amount > 0 && stake.unstakeDay == 0;
     }
 
