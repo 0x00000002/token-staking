@@ -2,16 +2,18 @@
 
 ## Overview
 
-This document defines use cases for the complete Token Staking System, including both the core staking subsystem and the comprehensive reward management system.
+This document defines use cases for the Token Staking System, including both the core staking subsystem and the reward management system.
 
 ## System Components
 
 ### Core Staking System
+
 - **StakingVault.sol**: Business logic and user interface contract
-- **StakingStorage.sol**: Data persistence and historical tracking contract  
+- **StakingStorage.sol**: Data persistence and historical tracking contract
 - **Token.sol**: Simple ERC20 test token
 
 ### Reward Management System
+
 - **RewardManager.sol**: Central reward calculation and distribution orchestration
 - **EpochManager.sol**: Epoch lifecycle management (announced → active → ended → calculated)
 - **StrategiesRegistry.sol**: Reward strategy registration and management
@@ -323,7 +325,7 @@ This document defines use cases for the complete Token Staking System, including
 
 1. **ANNOUNCED**: `announceEpoch()` with parameters and pool estimates
 2. **ACTIVE**: Automatic transition when startDay reached
-3. **ENDED**: Automatic transition when endDay passed  
+3. **ENDED**: Automatic transition when endDay passed
 4. **CALCULATED**: `finalizeEpoch()` with final statistics
 
 **Key Functions**:
@@ -374,7 +376,7 @@ This document defines use cases for the complete Token Staking System, including
 **Distribution Logic**:
 
 - User weight = Σ(stake_amount × effective_days_in_epoch)
-- User share = user_weight / total_epoch_weight  
+- User share = user_weight / total_epoch_weight
 - User reward = user_share × epoch_pool_size
 
 **Process Flow**:
@@ -605,40 +607,3 @@ This document defines use cases for the complete Token Staking System, including
 - Data integrity across contracts
 - Proper access control enforcement
 - Coordinated state changes
-
----
-
-## Notes for Auditors
-
-1. **Complete System Coverage**: This audit covers both the core staking subsystem (UC1-UC20, UC27-UC35) and the comprehensive reward management system (UC21-UC26).
-
-2. **Key Security Areas**:
-
-   **Core Staking**:
-   - Time lock validation logic
-   - Access control enforcement
-   - Reentrancy protection
-   - Historical data integrity
-
-   **Reward System**:
-   - Mathematical precision in reward calculations
-   - Access control for admin functions
-   - Reentrancy protection in claiming
-   - Strategy validation and security
-
-3. **Critical Functions**:
-
-   **Core Staking**:
-   - `StakingVault.stake()` / `StakingVault.unstake()`
-   - `StakingStorage.createStake()` / `StakingStorage.removeStake()`
-   - Historical query functions with binary search
-
-   **Reward System**:
-   - `RewardManager.calculateImmediateRewards()` / `calculateEpochRewards()`
-   - `RewardManager.claimAllRewards()` and claiming variants
-   - `EpochManager.announceEpoch()` / `finalizeEpoch()`
-   - Strategy registration and management functions
-
-4. **Gas Optimization**: Binary search implementation in checkpoint system for efficient historical queries.
-
-5. **Immutable Design**: Core contracts are immutable once deployed, enhancing security but requiring careful deployment.

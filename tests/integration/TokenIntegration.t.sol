@@ -118,7 +118,7 @@ contract TokenIntegrationTest is Test {
         // Test with exact allowance
         token.approve(address(vault), STAKE_AMOUNT);
 
-        bytes32 stakeId = vault.stake(STAKE_AMOUNT, DAYS_LOCK);
+        vault.stake(STAKE_AMOUNT, DAYS_LOCK);
 
         // Try to stake again with insufficient allowance
         vm.expectRevert(); // SafeERC20 will revert
@@ -164,7 +164,7 @@ contract TokenIntegrationTest is Test {
         vault.stake(0, DAYS_LOCK);
 
         // Test with valid amount
-        bytes32 stakeId = vault.stake(STAKE_AMOUNT, DAYS_LOCK);
+        vault.stake(STAKE_AMOUNT, DAYS_LOCK);
 
         vm.stopPrank();
     }

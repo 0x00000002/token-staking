@@ -26,7 +26,7 @@ contract EpochPoolStrategy is IEpochRewardStrategy {
         stakingStorage = _stakingStorage;
     }
 
-    function getStrategyType() external view returns (StrategyType) {
+    function getStrategyType() external pure returns (StrategyType) {
         return StrategyType.EPOCH_BASED;
     }
 
@@ -56,7 +56,6 @@ contract EpochPoolStrategy is IEpochRewardStrategy {
             stake.stakeDay >= params.startDay &&
             (params.endDay == 0 || stake.stakeDay <= params.endDay);
     }
-
 
     function calculateEpochReward(
         address, // staker

@@ -117,7 +117,7 @@ contract VaultStorageIntegrationTest is Test {
             uint16(0)
         );
 
-        bytes32 stakeId2 = vault.stake(STAKE_AMOUNT * 2, DAYS_LOCK);
+        vault.stake(STAKE_AMOUNT * 2, DAYS_LOCK);
 
         // Verify data remains consistent across contracts
         assertEq(stakingStorage.getStakerInfo(user1).stakesCounter, 2);
@@ -131,7 +131,7 @@ contract VaultStorageIntegrationTest is Test {
 
         // Create multiple stakes
         bytes32 stakeId1 = vault.stake(STAKE_AMOUNT, DAYS_LOCK);
-        bytes32 stakeId2 = vault.stake(STAKE_AMOUNT * 2, DAYS_LOCK);
+        vault.stake(STAKE_AMOUNT * 2, DAYS_LOCK);
 
         // Verify consistency
         assertEq(stakingStorage.getStakerInfo(user1).stakesCounter, 2);
@@ -206,12 +206,7 @@ contract VaultStorageIntegrationTest is Test {
 
         // Only vault should be able to call storage functions
         vm.startPrank(address(vault));
-        bytes32 stakeId = stakingStorage.createStake(
-            user1,
-            STAKE_AMOUNT,
-            DAYS_LOCK,
-            0
-        );
+        stakingStorage.createStake(user1, STAKE_AMOUNT, DAYS_LOCK, 0);
         vm.stopPrank();
     }
 
@@ -291,11 +286,11 @@ contract VaultStorageIntegrationTest is Test {
     function test_MultipleUsersIntegration() public {
         // Test multiple users interacting with the system
         vm.startPrank(user1);
-        bytes32 stakeId1 = vault.stake(STAKE_AMOUNT, DAYS_LOCK);
+        vault.stake(STAKE_AMOUNT, DAYS_LOCK);
         vm.stopPrank();
 
         vm.startPrank(user2);
-        bytes32 stakeId2 = vault.stake(STAKE_AMOUNT * 2, DAYS_LOCK);
+        vault.stake(STAKE_AMOUNT * 2, DAYS_LOCK);
         vm.stopPrank();
 
         // Verify global totals
@@ -312,8 +307,8 @@ contract VaultStorageIntegrationTest is Test {
 
         // Create multiple stakes
         bytes32 stakeId1 = vault.stake(STAKE_AMOUNT, DAYS_LOCK);
-        bytes32 stakeId2 = vault.stake(STAKE_AMOUNT * 2, DAYS_LOCK);
-        bytes32 stakeId3 = vault.stake(STAKE_AMOUNT * 3, DAYS_LOCK);
+        vault.stake(STAKE_AMOUNT * 2, DAYS_LOCK);
+        vault.stake(STAKE_AMOUNT * 3, DAYS_LOCK);
 
         // Verify initial state
         assertEq(stakingStorage.getStakerInfo(user1).stakesCounter, 3);
@@ -341,7 +336,7 @@ contract VaultStorageIntegrationTest is Test {
         );
 
         // Create another stake
-        bytes32 stakeId4 = vault.stake(STAKE_AMOUNT * 4, DAYS_LOCK);
+        vault.stake(STAKE_AMOUNT * 4, DAYS_LOCK);
 
         // Verify final state
         StakingStorage.StakerInfo memory info_after = stakingStorage

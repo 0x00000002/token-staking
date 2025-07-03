@@ -1051,6 +1051,288 @@ Feature: Reward System Event Integration
     And integration should be reliable
 ```
 
+## GRANTED REWARD STORAGE TESTS (MISSING)
+
+### TC_GRS01: Grant Reward Operations (UC26)
+
+```gherkin
+Feature: Reward Grant Management
+  Scenario: Successfully grant reward to user
+    Given caller has CONTROLLER_ROLE
+    And reward parameters are valid (user, strategyId, version, amount, epochId)
+    And amount is greater than zero
+    When grantReward(user, strategyId, version, amount, epochId) is called
+    Then reward should be added to user's reward array
+    And reward should be marked as unclaimed
+    And RewardGranted event should be emitted with correct parameters
+    And reward should be queryable via getUserRewards()
+
+  Scenario: Grant reward with zero amount
+    Given caller has CONTROLLER_ROLE
+    And amount is zero
+    When grantReward is called with zero amount
+    Then operation should complete (zero rewards are valid)
+    And reward should be recorded with amount = 0
+
+  Scenario: Grant reward with maximum uint128 amount
+    Given caller has CONTROLLER_ROLE  
+    And amount is type(uint128).max
+    When grantReward is called
+    Then operation should complete without overflow
+    And reward should be recorded accurately
+
+  Scenario: Unauthorized reward granting
+    Given caller does not have CONTROLLER_ROLE
+    When grantReward is called
+    Then transaction should revert with access control error
+    And no reward should be granted
+```
+
+### TC_GRS02: Single Reward Claiming (UC26)
+
+```gherkin
+Feature: Single Reward Claiming State Management
+  Scenario: Successfully mark single reward as claimed
+    Given user has unclaimed rewards
+    And caller has CONTROLLER_ROLE
+    And reward index is valid
+    When markRewardClaimed(user, rewardIndex) is called
+    Then reward at index should be marked as claimed
+    And RewardClaimed event should be emitted with user, index, amount
+    And reward should no longer appear in claimable queries
+
+  Scenario: Mark already claimed reward as claimed
+    Given user has reward that is already claimed
+    When markRewardClaimed is called for same reward
+    Then transaction should revert with RewardAlreadyClaimed error
+    And error should include the reward index
+
+  Scenario: Mark reward with invalid index
+    Given user has rewards array of length N
+    When markRewardClaimed is called with index >= N
+    Then transaction should revert with array bounds error
+
+  Scenario: Unauthorized reward claiming
+    Given caller does not have CONTROLLER_ROLE
+    When markRewardClaimed is called
+    Then transaction should revert with access control error
+```
+
+### TC_GRS03: Batch Reward Claiming (UC26)
+
+```gherkin
+Feature: Batch Reward Claiming State Management
+  Scenario: Successfully mark multiple rewards as claimed
+    Given user has multiple unclaimed rewards
+    And caller has CONTROLLER_ROLE
+    And reward indices array contains valid indices
+    When batchMarkClaimed(user, indices[]) is called
+    Then all specified rewards should be marked as claimed
+    And BatchRewardsClaimed event should be emitted
+    And event should include total amount and count of claimed rewards
+
+  Scenario: Batch claim with mix of claimed and unclaimed rewards
+    Given batch includes some already-claimed rewards
+    When batchMarkClaimed is called
+    Then only unclaimed rewards should be processed
+    And already-claimed rewards should be skipped silently
+    And event should reflect only newly claimed rewards
+
+  Scenario: Batch claim with empty array
+    Given indices array is empty
+    When batchMarkClaimed is called
+    Then operation should complete without error
+    And BatchRewardsClaimed event should show zero amount and count
+
+  Scenario: Batch claim with duplicate indices
+    Given indices array contains duplicate values
+    When batchMarkClaimed is called
+    Then each reward should only be claimed once
+    And subsequent attempts on same index should be skipped
+```
+
+### TC_GRS04: User Rewards Retrieval (UC26)
+
+```gherkin
+Feature: User Reward History Queries
+  Scenario: Get rewards for user with no rewards
+    Given user has never received any rewards
+    When getUserRewards(user) is called
+    Then empty array should be returned
+    And function should not revert
+
+  Scenario: Get rewards for user with single reward
+    Given user has been granted one reward
+    When getUserRewards is called
+    Then array with single reward should be returned
+    And reward data should match granted parameters
+
+  Scenario: Get rewards for user with multiple rewards
+    Given user has been granted multiple rewards from different strategies/epochs
+    When getUserRewards is called
+    Then complete array should be returned in chronological order
+    And all reward details should be accurate
+
+  Scenario: Get rewards with mix of claimed and unclaimed
+    Given user has mix of claimed and unclaimed rewards
+    When getUserRewards is called
+    Then all rewards should be returned regardless of claimed status
+    And claimed flags should be accurate
+```
+
+### TC_GRS05: Claimable Amount Calculation (UC26)
+
+```gherkin
+Feature: Claimable Amount Calculation
+  Scenario: Calculate claimable amount for user with no rewards
+    Given user has no rewards
+    When getUserClaimableAmount(user) is called
+    Then zero should be returned
+
+  Scenario: Calculate claimable amount for user with all rewards claimed
+    Given user has rewards but all are marked as claimed
+    When getUserClaimableAmount is called
+    Then zero should be returned
+
+  Scenario: Calculate claimable amount for user with all rewards unclaimed
+    Given user has multiple unclaimed rewards with amounts [100, 200, 300]
+    When getUserClaimableAmount is called
+    Then 600 should be returned (sum of all amounts)
+
+  Scenario: Calculate claimable amount with mix of claimed/unclaimed
+    Given user has rewards: [100 claimed, 200 unclaimed, 300 unclaimed]
+    When getUserClaimableAmount is called
+    Then 500 should be returned (sum of unclaimed only)
+
+  Scenario: Calculate claimable amount with large numbers
+    Given user has unclaimed rewards near uint128 maximum
+    When getUserClaimableAmount is called
+    Then calculation should not overflow
+    And accurate sum should be returned
+```
+
+### TC_GRS06: Claimable Rewards with Indices (UC26)
+
+```gherkin
+Feature: Claimable Rewards Query with Index Optimization
+  Scenario: Get claimable rewards for user with no rewards
+    Given user has no rewards
+    When getUserClaimableRewards(user) is called
+    Then empty arrays should be returned for both rewards and indices
+
+  Scenario: Get claimable rewards for user with all rewards claimed
+    Given user has rewards but all are claimed
+    When getUserClaimableRewards is called
+    Then empty arrays should be returned
+
+  Scenario: Get claimable rewards with nextClaimableIndex optimization
+    Given user has 100 rewards where first 50 are claimed
+    And _nextClaimableIndex[user] is 50
+    When getUserClaimableRewards is called
+    Then function should start checking from index 50
+    And should return unclaimed rewards from index 50 onwards with correct indices
+
+  Scenario: Get claimable rewards with mixed claimed status
+    Given user has rewards [claimed, unclaimed, claimed, unclaimed]
+    When getUserClaimableRewards is called
+    Then should return unclaimed rewards with indices [1, 3]
+    And reward data should match those at indices 1 and 3
+```
+
+### TC_GRS07: Epoch-Specific Rewards (UC26)
+
+```gherkin
+Feature: Epoch-Specific Reward Queries
+  Scenario: Get rewards for epoch with no rewards
+    Given user has no rewards from specified epochId
+    When getUserEpochRewards(user, epochId) is called
+    Then empty array should be returned
+
+  Scenario: Get rewards for specific epoch with multiple rewards
+    Given user has rewards from epochs [1, 2, 1, 3, 2]
+    When getUserEpochRewards(user, 2) is called
+    Then should return rewards from positions [1, 4] (epoch 2 rewards only)
+
+  Scenario: Get immediate rewards (epoch 0)
+    Given user has mix of immediate rewards (epochId = 0) and epoch rewards
+    When getUserEpochRewards(user, 0) is called
+    Then should return only immediate rewards with epochId = 0
+
+  Scenario: Get rewards for non-existent epoch
+    Given no rewards exist for specified epochId
+    When getUserEpochRewards is called
+    Then empty array should be returned
+    And function should not revert
+```
+
+### TC_GRS08: Paginated Rewards (UC26)
+
+```gherkin
+Feature: Paginated Reward Queries
+  Scenario: Get paginated rewards with valid offset and limit
+    Given user has 100 rewards
+    When getUserRewardsPaginated(user, 20, 10) is called
+    Then should return rewards from indices 20-29 (10 items)
+    And returned array should have length 10
+
+  Scenario: Get paginated rewards with offset beyond array length
+    Given user has 50 rewards
+    When getUserRewardsPaginated(user, 100, 10) is called
+    Then empty array should be returned
+    And function should not revert
+
+  Scenario: Get paginated rewards with limit exceeding remaining items
+    Given user has 50 rewards
+    When getUserRewardsPaginated(user, 45, 10) is called
+    Then should return rewards from indices 45-49 (5 items)
+    And returned array should have length 5
+
+  Scenario: Get paginated rewards with zero limit
+    Given user has rewards
+    When getUserRewardsPaginated(user, 0, 0) is called
+    Then empty array should be returned
+
+  Scenario: Pagination boundary conditions
+    Given user has exactly 10 rewards
+    When getUserRewardsPaginated(user, 0, 10) is called
+    Then should return all 10 rewards
+    When getUserRewardsPaginated(user, 10, 10) is called
+    Then should return empty array
+```
+
+### TC_GRS09: Next Claimable Index Management (UC26)
+
+```gherkin
+Feature: Claiming Index Optimization
+  Scenario: Update index after claiming first reward
+    Given user has rewards [unclaimed, unclaimed, unclaimed]
+    And _nextClaimableIndex[user] is 0
+    When first reward is claimed and updateNextClaimableIndex is called
+    Then _nextClaimableIndex[user] should remain 0 (still unclaimed rewards from start)
+
+  Scenario: Update index after claiming first few rewards
+    Given user has rewards [claimed, claimed, unclaimed, unclaimed]
+    When updateNextClaimableIndex(user) is called
+    Then _nextClaimableIndex[user] should be set to 2 (first unclaimed index)
+
+  Scenario: Update index when all rewards are claimed
+    Given user has rewards and all are claimed
+    When updateNextClaimableIndex is called
+    Then _nextClaimableIndex[user] should be set to array length
+    And subsequent getUserClaimableRewards should return empty quickly
+
+  Scenario: Update index for user with no rewards
+    Given user has no rewards
+    When updateNextClaimableIndex is called
+    Then _nextClaimableIndex[user] should be 0
+    And function should not revert
+
+  Scenario: Unauthorized index update
+    Given caller does not have CONTROLLER_ROLE
+    When updateNextClaimableIndex is called
+    Then transaction should revert with access control error
+```
+
 ## FLAG SYSTEM TESTS (MISSING)
 
 ### TC_F01: Basic Flag Operations (UC20)

@@ -50,22 +50,32 @@ export ADMIN=0xeb24a849E6C908D4166D34D7E3133B452CB627D2
 export MANAGER=0x1Fb0E85b7Ba55F0384d0E06D81DF915aeb3baca3
 export MULTISIG=0x... # Address for the separate, secure multisig wallet (granted separately after deployment)
 export TOKEN=0x....
+export REWARD_TOKEN=0x... # Reward token address (can be same as staking token)
 export ETHERSCAN_API_KEY=
 ```
 
+### Deployment Order
+
+**IMPORTANT**: The complete system requires deploying components in this specific order:
+
+1. **Core Staking System** (StakingStorage + StakingVault)
+2. **Reward System** (StrategiesRegistry, EpochManager, GrantedRewardStorage, RewardManager)
+3. **Strategy Implementations** (LinearAPRStrategy, EpochPoolStrategy)
+4. **Integration Setup** (Role grants, strategy registrations)
+
 ### Method 1: Using Deployment Scripts (Recommended)
 
-#### Option A: Deploy with existing token
+#### Option A: Deploy Complete System with Existing Token
 
 ```sh
-forge script scripts/DeployWithExistingToken.s.sol:DeployWithExistingToken \
+forge script scripts/DeployCompleteSystem.s.sol:DeployCompleteSystem \
   --rpc-url $RPC_URL \
   --private-key $DEPLOYER_PK \
   --broadcast \
   --verify
 ```
 
-#### Option B: Deploy with new token
+#### Option B: Deploy Core Staking Only (Legacy)
 
 ```sh
 forge script scripts/DeployStaking.s.sol:DeployStaking \

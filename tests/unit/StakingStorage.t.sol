@@ -265,11 +265,11 @@ contract StakingStorageTest is Test {
     function test_TC25_BasicDataIntegrity() public {
         vm.startPrank(user1);
         bytes32 stakeId1 = vault.stake(STAKE_AMOUNT, DAYS_LOCK);
-        bytes32 stakeId2 = vault.stake(STAKE_AMOUNT * 2, DAYS_LOCK);
+        vault.stake(STAKE_AMOUNT * 2, DAYS_LOCK);
         vm.stopPrank();
 
         vm.startPrank(user2);
-        bytes32 stakeId3 = vault.stake(STAKE_AMOUNT * 3, DAYS_LOCK);
+        vault.stake(STAKE_AMOUNT * 3, DAYS_LOCK);
         vm.stopPrank();
 
         // Verify global currentTotalStaked equals sum of active stakes
@@ -283,12 +283,16 @@ contract StakingStorageTest is Test {
 
         // Verify state consistency after unstaking
         assertEq(stakingStorage.getCurrentTotalStaked(), STAKE_AMOUNT * 5);
-        
+
         // Verify user totals match individual stakes
-        StakingStorage.StakerInfo memory info1 = stakingStorage.getStakerInfo(user1);
+        StakingStorage.StakerInfo memory info1 = stakingStorage.getStakerInfo(
+            user1
+        );
         assertEq(info1.totalStaked, STAKE_AMOUNT * 2); // Only active stakes
-        
-        StakingStorage.StakerInfo memory info2 = stakingStorage.getStakerInfo(user2);
+
+        StakingStorage.StakerInfo memory info2 = stakingStorage.getStakerInfo(
+            user2
+        );
         assertEq(info2.totalStaked, STAKE_AMOUNT * 3);
     }
 
@@ -298,33 +302,39 @@ contract StakingStorageTest is Test {
 
     function test_TC26_VaultStorageIntegration() public {
         vm.startPrank(user1);
-        
+
         // Test that vault correctly calls storage functions
         bytes32 stakeId = vault.stake(STAKE_AMOUNT, DAYS_LOCK);
-        
+
         // Verify stake was created in storage
-        StakingStorage.Stake memory stake = stakingStorage.getStake(user1, stakeId);
+        StakingStorage.Stake memory stake = stakingStorage.getStake(
+            user1,
+            stakeId
+        );
         assertEq(stake.amount, STAKE_AMOUNT);
         assertEq(stake.daysLock, DAYS_LOCK);
-        
+
         // Verify CONTROLLER_ROLE enforcement
         vm.stopPrank();
-        
+
         // Test that only vault (with CONTROLLER_ROLE) can call storage functions
         vm.startPrank(user2);
         vm.expectRevert(); // AccessControl error
         stakingStorage.createStake(user2, STAKE_AMOUNT, DAYS_LOCK, 0);
         vm.stopPrank();
-        
+
         // Test unstaking integration
         vm.startPrank(user1);
         vm.warp(block.timestamp + (DAYS_LOCK + 1) * 1 days);
         vault.unstake(stakeId);
-        
+
         // Verify data consistency across contracts
-        StakingStorage.Stake memory unstakedStake = stakingStorage.getStake(user1, stakeId);
+        StakingStorage.Stake memory unstakedStake = stakingStorage.getStake(
+            user1,
+            stakeId
+        );
         assertEq(unstakedStake.unstakeDay, uint16(block.timestamp / 1 days));
-        
+
         vm.stopPrank();
     }
 
@@ -334,27 +344,30 @@ contract StakingStorageTest is Test {
 
     function test_TC27_TokenIntegration() public {
         vm.startPrank(user1);
-        
+
         // Test basic token operations with standard ERC20
         uint256 balanceBefore = token.balanceOf(user1);
         uint256 vaultBalanceBefore = token.balanceOf(address(vault));
-        
+
         bytes32 stakeId = vault.stake(STAKE_AMOUNT, DAYS_LOCK);
-        
+
         // Verify token transfers work correctly
         assertEq(token.balanceOf(user1), balanceBefore - STAKE_AMOUNT);
-        assertEq(token.balanceOf(address(vault)), vaultBalanceBefore + STAKE_AMOUNT);
-        
+        assertEq(
+            token.balanceOf(address(vault)),
+            vaultBalanceBefore + STAKE_AMOUNT
+        );
+
         // Test unstaking token transfer
         vm.warp(block.timestamp + (DAYS_LOCK + 1) * 1 days);
         uint256 balanceBeforeUnstake = token.balanceOf(user1);
-        
+
         vault.unstake(stakeId);
-        
+
         // Verify balances updated appropriately
         assertEq(token.balanceOf(user1), balanceBeforeUnstake + STAKE_AMOUNT);
         assertEq(token.balanceOf(address(vault)), vaultBalanceBefore);
-        
+
         vm.stopPrank();
     }
 
@@ -364,29 +377,27 @@ contract StakingStorageTest is Test {
 
     function test_TC28_BasicTimeLockValidation() public {
         vm.startPrank(user1);
-        
+
         // Test realistic time lock boundaries (30 days)
         bytes32 stakeId = vault.stake(STAKE_AMOUNT, DAYS_LOCK);
-        
+
         // Should not be able to unstake before time lock expires
         vm.expectRevert();
         vault.unstake(stakeId);
-        
+
         // Fast forward exactly 30 days
         vm.warp(block.timestamp + DAYS_LOCK * 1 days);
-        
+
         // Should be able to unstake when time lock expires
         vault.unstake(stakeId);
-        
+
         // Verify time lock validation worked correctly
-        StakingStorage.Stake memory stake = stakingStorage.getStake(user1, stakeId);
+        StakingStorage.Stake memory stake = stakingStorage.getStake(
+            user1,
+            stakeId
+        );
         assertEq(stake.unstakeDay, uint16(block.timestamp / 1 days));
-        
+
         vm.stopPrank();
     }
-
-
-
-
-
 }

@@ -26,11 +26,11 @@ contract LinearAPRStrategy is IImmediateRewardStrategy {
         stakingStorage = _stakingStorage;
     }
 
-    function getStrategyType() external view returns (StrategyType) {
+    function getStrategyType() external pure returns (StrategyType) {
         return StrategyType.IMMEDIATE;
     }
 
-    function getEpochDuration() external view returns (uint32) {
+    function getEpochDuration() external pure returns (uint32) {
         return 0;
     }
 
@@ -87,5 +87,4 @@ contract LinearAPRStrategy is IImmediateRewardStrategy {
             (stake.amount * annualRateBasisPoints * effectiveDays) /
             (365 * 10_000);
     }
-
 }
