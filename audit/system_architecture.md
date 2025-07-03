@@ -53,7 +53,7 @@ struct Stake {
     uint16 stakeDay;     // 2 bytes - day when stake was created
     uint16 unstakeDay;   // 2 bytes - day when stake was unstaked (0 if active)
     uint16 daysLock;     // 2 bytes - lock period in days
-    bool isFromClaim;    // 1 byte - whether stake originated from claim contract
+    uint16 flags;        // bits encoded flags
 }
 ```
 
@@ -214,18 +214,11 @@ These contracts are **not upgradeable** by design for security reasons. Any chan
 
 ## Code Quality Metrics
 
-### Contract Size and Complexity
-
-- **StakingVault**: ~210 lines, 6 public/external functions
-- **StakingStorage**: ~325 lines, 12 public/external functions
-- **State Variables**: Custom mappings and checkpoint system for comprehensive tracking
-- **External Dependencies**: OpenZeppelin contracts (AccessControl, Pausable, ReentrancyGuard, SafeERC20)
-
 ### Test Coverage Expectations
 
 - **Function Coverage**: 100% of public functions
 - **Branch Coverage**: 100% of conditional logic
-- **Edge Cases**: All error conditions and boundary cases tested
+- **Edge Cases**: We are not going to test edge cases that makes no sense, like locking tokens for maximum possible by `uint16` 179 years.
 - **Integration Tests**: Full vault-bookkeeper integration
 - **Historical Data Tests**: Checkpoint functionality verification
 - **Batch Operation Tests**: Multi-stake/unstake scenarios

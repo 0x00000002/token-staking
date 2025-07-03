@@ -23,11 +23,7 @@ This role serves as the role manager, responsible for assigning other roles and 
 
 **StakingVault Permissions:**
 
-```solidity
-function emergencyRecover(IERC20 token_, uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE)
-```
-
-**Design rationale:** We've intentionally limited this role to role management and emergency recovery rather than day-to-day operations. This ensures that even if the admin role is compromised, the attacker cannot directly manipulate stakes without first granting themselves additional roles (which should be noticeable through events).
+**Design rationale:** We've intentionally limited this role to role management rather than day-to-day operations or emergency recovery. This ensures that even if the admin role is compromised, the attacker cannot directly manipulate stakes without first granting themselves additional roles (which should be noticeable through events).
 
 ### MANAGER_ROLE (`keccak256("MANAGER_ROLE")`)
 
@@ -192,6 +188,7 @@ DEFAULT_ADMIN_ROLE = 0x000000000000000000000000000000000000000000000000000000000
 MANAGER_ROLE = 0x241ecf16d79d0f8dbfb92cbc07fe17840425976cf0667f022fe9877caa831b08
 CONTROLLER_ROLE = 0x7b765e0e932d348852a6f810bfa1ab891615cb53504089c3e26b8c96ca14c3d5
 CLAIM_CONTRACT_ROLE = 0x7b86e74b5b2cbeb359a5556f7b8aa26ec9fb74773c1c7b2dc16e82d368c70627
+MULTISIG_ROLE = 0xa5a0b70b385ff7611cd3840916bd08b10829e5bf9e6637cf79dd9a427fc0e2ab
 ```
 
 ## Testing and Verification

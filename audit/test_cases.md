@@ -1,10 +1,27 @@
-# Token Staking System: Test Cases
+# Token Staking System: Comprehensive Test Cases
 
 ## Overview
 
-This document defines comprehensive test cases for the STAKING SUBSYSTEM ONLY. Test cases are mapped to use cases defined in `use_cases.md` and cover the current implementation of StakingVault and StakingStorage contracts.
+This document defines comprehensive test cases for the **COMPLETE TOKEN STAKING SYSTEM**, including both the core staking subsystem and the comprehensive reward management system. Test cases are mapped to use cases defined in `use_cases.md` and cover all contracts and integration points.
 
-**Note**: Tests are currently outdated and need to be rewritten based on these specifications.
+**Status**: This specification defines the complete test suite needed for audit readiness. Many tests are missing and need to be implemented.
+
+## Test Categories Overview
+
+- **Core Staking Tests (TC1-TC22)**: 22 practical test cases covering StakingVault and StakingStorage
+- **Reward System Tests (TC_R01-TC_R30)**: 30 test cases covering complete reward functionality
+- **Flag System Tests (TC_F01-TC_F03)**: 3 test cases for extensible flag operations
+- **Integration Tests (TC_I01-TC_I07)**: 7 simplified test cases for cross-system integration
+
+**Total: 62 practical test cases** *(Removed over-engineered/redundant tests)*
+
+**Removed Categories:**
+- Edge case tests (TC29-TC43) - Over-engineered implementation details
+- Performance Tests - Use separate performance testing
+- Invariant Tests - Covered by functional tests  
+- Error Recovery Tests - Redundant with error handling
+- Event Tests - Events verified within functional tests
+- Mathematical precision tests - Focus on business logic only
 
 ## Core Staking Function Tests
 
@@ -20,7 +37,7 @@ Feature: Direct Token Staking
     And days lock is valid uint16 value
     When user calls StakingVault.stake(amount, daysLock)
     Then tokens should be transferred from user to StakingVault
-    And unique stake ID should be generated using keccak256(abi.encode(staker, stakesCount))
+    And unique stake ID should be generated using compound key: bytes32((uint256(uint160(staker)) << 96) | stakesCounter)
     And StakingStorage.createStake should be called with correct parameters
     And stake should be recorded with isFromClaim = false
     And user's stakesCount should be incremented
@@ -70,18 +87,15 @@ Feature: Time Lock Validation
     And no state should be modified in either contract
 ```
 
-### TC4: Failed Staking - Insufficient Balance (UC12)
+### TC4: SafeERC20 Basic Usage Verification (UC12)
 
 ```gherkin
-Feature: Balance Validation
-  Scenario: User attempts to stake more than they have
-    Given user has token balance of 100
-    And user attempts to stake 200 tokens
-    When user calls stake(200, 0)
-    Then transaction should revert (SafeERC20 will handle this)
-    And no tokens should be transferred
-    And no stake should be created
-    And no state should be modified
+Feature: SafeERC20 Library Usage
+  Scenario: Verify SafeERC20 is used for token operations
+    Given StakingVault uses SafeERC20 for token transfers
+    When token transfers occur during stake/unstake
+    Then SafeERC20.transferFrom and SafeERC20.transfer should be used
+    And basic token operations should complete successfully
 ```
 
 ### TC5: Failed Staking - Zero Amount (UC12)
@@ -120,55 +134,48 @@ Feature: Claim Integration
     And stake ID should be returned to claiming contract
 ```
 
-### TC7: Failed Claim Stake - Unauthorized (UC14)
+### TC7: Basic Role Verification - Claim Contract (UC14)
 
 ```gherkin
-Feature: Access Control
-  Scenario: Unauthorized contract attempts stakeFromClaim
+Feature: Basic Access Control
+  Scenario: Verify CLAIM_CONTRACT_ROLE enforcement
     Given contract does not have CLAIM_CONTRACT_ROLE
     When contract calls stakeFromClaim(staker, amount, daysLock)
     Then transaction should revert with AccessControl error
-    And no stake should be created
-    And no state should be modified
 ```
 
 ## Manager Role Tests
 
-### TC8: Pause System (UC4)
+### TC8: Basic Pausable Usage (UC4)
 
 ```gherkin
-Feature: System Pause
-  Scenario: Manager pauses the system
+Feature: Pausable Library Usage
+  Scenario: Basic pause functionality
     Given actor has MANAGER_ROLE
-    And system is not currently paused
     When manager calls StakingVault.pause()
     Then system should be paused
-    And Paused event should be emitted
-    And all stake/unstake operations should be blocked
+    And stake/unstake operations should be blocked
 ```
 
-### TC9: Unpause System (UC5)
+### TC9: Basic Unpause Usage (UC5)
 
 ```gherkin
-Feature: System Unpause
-  Scenario: Manager unpauses the system
-    Given actor has MANAGER_ROLE
-    And system is currently paused
+Feature: Pausable Library Usage
+  Scenario: Basic unpause functionality
+    Given actor has MANAGER_ROLE and system is paused
     When manager calls StakingVault.unpause()
     Then system should be unpaused
-    And Unpaused event should be emitted
-    And stake/unstake operations should be enabled again
+    And operations should be enabled again
 ```
 
-### TC10: Failed Pause - Unauthorized (UC14)
+### TC10: Basic Role Verification - Manager (UC14)
 
 ```gherkin
-Feature: Access Control
-  Scenario: Unauthorized user attempts to pause
+Feature: Basic Access Control
+  Scenario: Verify MANAGER_ROLE enforcement
     Given user does not have MANAGER_ROLE
     When user attempts to call pause()
     Then transaction should revert with AccessControl error
-    And system should remain unpaused
 ```
 
 ## Admin Role Tests
@@ -177,12 +184,12 @@ Feature: Access Control
 
 ```gherkin
 Feature: Emergency Recovery
-  Scenario: Admin recovers tokens from contract
-    Given actor has DEFAULT_ADMIN_ROLE
+  Scenario: Multisig recovers tokens from contract
+    Given actor has MULTISIG_ROLE
     And StakingVault has sufficient token balance
     And recovery amount is greater than zero
-    When admin calls emergencyRecover(token, amount)
-    Then specified tokens should be transferred to admin
+    When multisig calls emergencyRecover(token, amount)
+    Then specified tokens should be transferred to multisig
     And contract balance should decrease by amount
 ```
 
@@ -325,478 +332,1176 @@ Feature: Ownership Validation
     And no tokens should be transferred
 ```
 
-### TC22: Paused System Operations (UC13)
+### TC22: Basic Pausable Verification (UC13)
 
 ```gherkin
-Feature: Pause Protection
-  Scenario: User attempts to stake while system is paused
+Feature: Pausable Library Usage
+  Scenario: Operations blocked when paused
     Given the staking system is paused
-    And user has valid parameters
-    When user calls stake(amount, daysLock)
+    When user calls stake() or unstake()
     Then transaction should revert with Pausable error
-    And no tokens should be transferred
-    And no stake should be created
-
-  Scenario: User attempts to unstake while system is paused
-    Given the staking system is paused
-    And user has matured stake
-    When user calls unstake(stakeId)
-    Then transaction should revert with Pausable error
-    And no tokens should be transferred
 ```
 
 ## Security Tests
 
-### TC23: Reentrancy Protection (UC15)
+### TC23: ReentrancyGuard Basic Usage Verification (UC15)
 
 ```gherkin
-Feature: Security
-  Scenario: Malicious contract attempts reentrancy during stake
-    Given malicious contract implements token interface
-    When malicious contract attempts reentrancy during stake operation
-    Then transaction should revert with ReentrancyGuard error
-    And state should remain consistent
-
-  Scenario: Malicious contract attempts reentrancy during unstake
-    Given malicious contract has valid stake
-    When malicious contract attempts reentrancy during unstake
-    Then transaction should revert with ReentrancyGuard error
-    And state should remain consistent
+Feature: ReentrancyGuard Library Usage
+  Scenario: Verify nonReentrant modifier usage
+    Given StakingVault functions making external calls
+    When stake() and unstake() are called
+    Then these functions should have nonReentrant modifier
+    And normal operations should work with protection in place
 ```
 
-### TC24: Access Control Enforcement (UC14)
+### TC24: AccessControl Basic Usage Verification (UC14)
 
 ```gherkin
-Feature: Access Control
-  Scenario: Unauthorized storage access
+Feature: AccessControl Library Usage
+  Scenario: Basic role enforcement verification
     Given user does not have CONTROLLER_ROLE
     When user attempts to call StakingStorage.createStake directly
     Then transaction should revert with AccessControl error
-    And no state should be modified
-
-  Scenario: Unauthorized emergency recovery
-    Given user does not have DEFAULT_ADMIN_ROLE
-    When user attempts emergencyRecover
-    Then transaction should revert with AccessControl error
-    And no tokens should be transferred
 ```
 
-## Data Integrity Tests
+## Core Business Logic Tests
 
-### TC25: Checkpoint System Integrity (UC16)
-
-```gherkin
-Feature: Checkpoint System
-  Scenario: Checkpoints maintain sorted order
-    Given multiple balance changes occur
-    When checkpoints are created
-    Then checkpoint array should remain sorted by day
-    And binary search should function correctly
-    And historical queries should return accurate data
-
-  Scenario: Checkpoint creation on balance changes
-    Given user balance changes (stake/unstake)
-    When operation completes
-    Then checkpoint should be created for current day
-    And checkpoint should reflect new balance
-    And CheckpointCreated event should be emitted
-```
-
-### TC26: Global Statistics Accuracy (UC17)
+### TC25: Basic Data Integrity (UC16-17)
 
 ```gherkin
-Feature: Global Statistics
-  Scenario: Total staked amount consistency
+Feature: Core Data Consistency
+  Scenario: Stake and unstake state consistency
     Given multiple stake and unstake operations
     When operations complete
     Then global currentTotalStaked should equal sum of active stakes
-    And daily snapshots should be accurate
-    And totalStakesCount should match active stakes
-
-  Scenario: Staker registration consistency
-    Given new staker creates first stake
-    When stake operation completes
-    Then staker should be registered in allStakers array
-    And isStakerRegistered should be true
-    And staker count should be incremented
+    And user totals should match individual stakes
+    And state should be consistent across contracts
 ```
 
 ## Integration Tests
 
-### TC27: Vault-Storage Integration (UC19)
+### TC26: Vault-Storage Integration (UC19)
 
 ```gherkin
 Feature: Contract Integration
-  Scenario: StakingVault and StakingStorage coordination
+  Scenario: Basic vault-storage coordination
     Given both contracts are deployed and configured
     When staking operations are performed
     Then vault should correctly call storage functions
-    And storage should update state appropriately
     And CONTROLLER_ROLE should be properly enforced
-    And events should be emitted from both contracts
     And data should remain consistent across contracts
 ```
 
-### TC28: Token Integration (UC18)
+### TC27: Token Integration (UC18)
 
 ```gherkin
 Feature: Token Integration
-  Scenario: SafeERC20 token operations
+  Scenario: Basic token operations
     Given standard ERC20 token
     When stake/unstake operations occur
-    Then SafeERC20 should handle transfers securely
-    And allowance checks should be enforced
-    And balance validation should work correctly
-    And token-related errors should be handled properly
+    Then token transfers should work correctly
+    And balances should be updated appropriately
 ```
 
-## Edge Case Tests
-
-### TC29: Time Lock Boundary Conditions
+### TC28: Basic Time Lock Validation
 
 ```gherkin
-Feature: Time Lock Edge Cases
-  Scenario: Exact time lock expiry
-    Given stake with specific time lock
-    And current day equals stake day + days lock (exact boundary)
-    When user attempts to unstake
+Feature: Time Lock Business Logic
+  Scenario: Realistic time lock boundaries (7-365 days)
+    Given stake with 30 day time lock
+    When 30 days have passed
     Then unstaking should be allowed
-    And transaction should succeed
-
-  Scenario: Zero time lock staking
-    Given user stakes with daysLock = 0
-    When user immediately attempts to unstake
-    Then unstaking should be allowed immediately
-    And no time lock validation should occur
+    And time lock validation should work correctly
 ```
 
-### TC30: Large Number Handling
+# ═══════════════════════════════════════════════════════════════════════════
+# 🔥 MISSING TEST CASES - CRITICAL FOR AUDIT READINESS
+# ═══════════════════════════════════════════════════════════════════════════
+
+## REWARD SYSTEM TESTS (CRITICAL - ZERO COVERAGE)
+
+### TC_R01: Strategy Registration (UC21)
 
 ```gherkin
-Feature: Numeric Edge Cases
-  Scenario: Maximum uint128 stake amount
-    Given user stakes maximum uint128 amount
-    When operations are performed
-    Then calculations should not overflow
+Feature: Strategy Registration and Management
+  Scenario: Successfully register new reward strategy
+    Given admin has DEFAULT_ADMIN_ROLE
+    And strategy contract implements IBaseRewardStrategy
+    And strategy address is valid contract
+    When admin calls StrategiesRegistry.registerStrategy(strategyAddress)
+    Then strategy should be registered with new strategyId
+    And strategy should be inactive by default
+    And StrategyRegistered event should be emitted
+    And strategy should be queryable by ID
+
+  Scenario: Register strategy with invalid address
+    Given admin attempts to register invalid address
+    When registerStrategy(invalidAddress) is called
+    Then transaction should revert with appropriate error
+    And no strategy should be registered
+```
+
+### TC_R02: Strategy Status Management (UC21)
+
+```gherkin
+Feature: Strategy Activation and Deactivation
+  Scenario: Activate registered strategy
+    Given strategy is registered but inactive
+    And admin has proper permissions
+    When admin calls setStrategyStatus(strategyId, true)
+    Then strategy should be marked as active
+    And strategy should appear in active strategies list
+    And StrategyStatusChanged event should be emitted
+
+  Scenario: Deactivate active strategy
+    Given strategy is currently active
+    When admin calls setStrategyStatus(strategyId, false)
+    Then strategy should be marked as inactive
+    And strategy should be removed from active list
+    And event should be emitted
+
+  Scenario: Unauthorized strategy status change
+    Given user does not have admin role
+    When user attempts setStrategyStatus
+    Then transaction should revert with access control error
+```
+
+### TC_R03: Strategy Versioning (UC21)
+
+```gherkin
+Feature: Strategy Version Management
+  Scenario: Update strategy version
+    Given strategy is registered
+    And admin has proper permissions
+    When admin calls updateStrategyVersion(strategyId)
+    Then strategy version should be incremented
+    And StrategyVersionUpdated event should be emitted
+    And version should be queryable
+
+  Scenario: Update version of non-existent strategy
+    Given invalid strategy ID
+    When updateStrategyVersion is called
+    Then transaction should revert with StrategyNotFound error
+```
+
+### TC_R04: Epoch Announcement (UC22)
+
+```gherkin
+Feature: Epoch Lifecycle - Announcement Phase
+  Scenario: Successfully announce new epoch
+    Given admin has proper permissions
+    And epoch parameters are valid (startDay > currentDay)
+    And strategy ID exists and is active
+    When admin calls EpochManager.announceEpoch(startDay, endDay, strategyId, estimatedPool)
+    Then new epoch should be created with ANNOUNCED state
+    And epoch should be added to announced epochs list
+    And epoch ID should be returned
+    And epoch should be queryable
+
+  Scenario: Announce epoch with invalid parameters
+    Given invalid epoch parameters (startDay <= currentDay)
+    When announceEpoch is called
+    Then transaction should revert with appropriate error
+    And no epoch should be created
+```
+
+### TC_R05: Epoch State Transitions (UC22)
+
+```gherkin
+Feature: Epoch State Machine
+  Scenario: ANNOUNCED to ACTIVE transition
+    Given epoch is in ANNOUNCED state
+    And current day >= epoch.startDay
+    When updateEpochStates() is called
+    Then epoch state should change to ACTIVE
+    And epoch should be moved from announced to active list
+    And state should be queryable
+
+  Scenario: ACTIVE to ENDED transition
+    Given epoch is in ACTIVE state
+    And current day > epoch.endDay
+    When updateEpochStates() is called
+    Then epoch state should change to ENDED
+    And epoch should be removed from active list
+
+  Scenario: ENDED to CALCULATED transition
+    Given epoch is in ENDED state
+    And admin sets actual pool size
+    When admin calls finalizeEpoch(epochId, participants, totalWeight)
+    Then epoch state should change to CALCULATED
+    And statistics should be recorded
+    And calculatedAt timestamp should be set
+```
+
+### TC_R06: Epoch Pool Management (UC22)
+
+```gherkin
+Feature: Epoch Pool Size Management
+  Scenario: Set actual pool size for ended epoch
+    Given epoch is in ENDED state
+    When admin calls setEpochPoolSize(epochId, actualAmount)
+    Then epoch.actualPoolSize should be updated
+    And epoch should be ready for calculation
+
+  Scenario: Set pool size for non-ended epoch
+    Given epoch is not in ENDED state
+    When setEpochPoolSize is called
+    Then transaction should revert with EpochNotEnded error
+```
+
+### TC_R07: Immediate Reward Calculation (UC23)
+
+```gherkin
+Feature: APR-Style Reward Processing
+  Scenario: Calculate immediate rewards for batch of users
+    Given strategy is registered and active
+    And strategy type is IMMEDIATE
+    And users have stakes within time period
+    And batch size is within limits
+    When admin calls calculateImmediateRewards(strategyId, fromDay, toDay, batchStart, batchSize)
+    Then system should fetch user stakes via pagination
+    And strategy should determine stake applicability
+    And rewards should be calculated for eligible stakes
+    And rewards should be granted to GrantedRewardStorage
+    And processing should be gas-efficient
+
+  Scenario: Calculate rewards with invalid strategy
+    Given strategy is not IMMEDIATE type
+    When calculateImmediateRewards is called
+    Then transaction should revert with InvalidStrategyType error
+
+  Scenario: Batch size exceeds maximum
+    Given batch size > MAX_BATCH_SIZE
+    When calculateImmediateRewards is called
+    Then transaction should revert with BatchSizeExceeded error
+```
+
+### TC_R08: Epoch Reward Distribution (UC24)
+
+```gherkin
+Feature: Pool-Based Reward Distribution
+  Scenario: Calculate epoch rewards for participants
+    Given epoch is in CALCULATED state
+    And epoch has actual pool size set
+    And strategy is EPOCH_BASED type
+    When admin calls calculateEpochRewards(epochId, batchStart, batchSize)
+    Then system should calculate user participation weights
+    And rewards should be distributed proportionally
+    And rewards should be granted with epoch ID
+    And mathematical precision should be maintained
+
+  Scenario: Calculate rewards for non-calculated epoch
+    Given epoch is not in CALCULATED state
+    When calculateEpochRewards is called
+    Then transaction should revert with EpochNotCalculated error
+
+  Scenario: Epoch without pool size
+    Given epoch is CALCULATED but actualPoolSize = 0
+    When calculateEpochRewards is called
+    Then transaction should revert with EpochPoolSizeNotSet error
+```
+
+### TC_R09: User Weight Calculation (UC24)
+
+```gherkin
+Feature: Epoch Participation Weight Calculation
+  Scenario: Calculate user weight for epoch period
+    Given user has stakes during epoch period
+    And stakes have different amounts and durations
+    When _calculateUserEpochWeight is called
+    Then weight should equal sum of (amount × effective_days)
+    And effective days should be intersection of stake period and epoch
+    And unstaked positions should be handled correctly
+    And mathematical precision should be maintained
+
+  Scenario: User with no stakes during epoch
+    Given user has no active stakes during epoch period
+    When weight calculation is performed
+    Then weight should be zero
+    And user should receive no rewards
+```
+
+### TC_R10: Reward Claiming - All Rewards (UC25)
+
+```gherkin
+Feature: Complete Reward Claiming
+  Scenario: Claim all available rewards
+    Given user has multiple unclaimed rewards
+    And rewards are from different strategies/epochs
+    When user calls claimAllRewards()
+    Then all unclaimed rewards should be identified
+    And total amount should be calculated
+    And rewards should be marked as claimed
+    And tokens should be transferred to user
+    And claiming state should be updated
+
+  Scenario: Claim when no rewards available
+    Given user has no unclaimed rewards
+    When claimAllRewards is called
+    Then transaction should revert with NoRewardsToClaim error
+```
+
+### TC_R11: Reward Claiming - Specific Rewards (UC25)
+
+```gherkin
+Feature: Selective Reward Claiming
+  Scenario: Claim specific reward indices
+    Given user has multiple unclaimed rewards
+    And user specifies valid reward indices
+    When user calls claimSpecificRewards(indices[])
+    Then only specified rewards should be claimed
+    And other rewards should remain unclaimed
+    And tokens should be transferred for specified amount
     And state should be updated correctly
+
+  Scenario: Claim with invalid indices
+    Given user specifies out-of-bounds indices
+    When claimSpecificRewards is called
+    Then transaction should revert with InvalidRewardIndex error
+
+  Scenario: Claim already claimed rewards
+    Given user specifies already-claimed reward indices
+    When claimSpecificRewards is called
+    Then transaction should revert with RewardAlreadyClaimed error
 ```
 
-### TC31: Storage Efficiency
+### TC_R12: Epoch-Specific Claiming (UC25)
 
 ```gherkin
-Feature: Storage Optimization
-  Scenario: Binary search performance
-    Given large number of checkpoints (1000+)
-    When historical balance query is performed
-    Then operation should complete efficiently
-    And gas usage should be logarithmic
-    And result should be accurate
+Feature: Epoch-Specific Reward Claiming
+  Scenario: Claim rewards from specific epoch
+    Given user has rewards from multiple epochs
+    And user specifies valid epoch ID
+    When user calls claimEpochRewards(epochId)
+    Then only rewards from specified epoch should be claimed
+    And rewards from other epochs should remain unclaimed
+    And claiming should work correctly
 
-  Scenario: Paginated queries with large datasets
-    Given large number of stakers (10000+)
-    When paginated query is performed
-    Then operation should complete without gas limit issues
-    And pagination should work correctly
-    And results should be accurate
+  Scenario: Claim from epoch with no rewards
+    Given user has no rewards from specified epoch
+    When claimEpochRewards is called
+    Then transaction should revert with NoClaimableRewardsForEpoch error
 ```
 
-## Event Emission Tests
-
-### TC32: Event Parameter Verification
+### TC_R13: Reward Storage - Grant Tracking (UC26)
 
 ```gherkin
-Feature: Event Logging
-  Scenario: Staked event emission
-    Given successful stake operation
-    When operation completes
-    Then Staked event should be emitted with correct parameters
-    And event should include staker, stakeId, amount, stakeDay, daysLock
-    And both vault and storage should emit coordinated events
+Feature: Reward Grant Management
+  Scenario: Grant reward to user
+    Given reward parameters are valid
+    And caller has CONTROLLER_ROLE
+    When grantReward(user, strategyId, version, amount, epochId) is called
+    Then reward should be added to user's reward array
+    And reward should be marked as unclaimed
+    And RewardGranted event should be emitted
+    And reward should be queryable
 
-  Scenario: Unstaked event emission
-    Given successful unstake operation
-    When operation completes
-    Then Unstaked event should be emitted with correct parameters
-    And event should include staker, stakeId, unstakeDay, amount
-    And both vault and storage should emit coordinated events
-```
-
-## Gas Optimization Tests
-
-### TC33: Gas Usage Verification
-
-```gherkin
-Feature: Gas Efficiency
-  Scenario: Stake operation gas usage
-    Given normal stake operation
-    When gas usage is measured
-    Then gas should be approximately 150,000 or less
-    And usage should be consistent across similar operations
-
-  Scenario: Historical query gas usage
-    Given checkpoint system with moderate data
-    When historical balance query is performed
-    Then gas should be approximately 25,000 or less
-    And binary search should provide O(log n) complexity
-```
-
-## Additional Critical Tests (Implementation-Specific)
-
-### TC34: StakingStorage Direct Function Tests
-
-```gherkin
-Feature: Storage Controller Functions
-  Scenario: Direct createStake call with proper role
-    Given caller has CONTROLLER_ROLE
-    And stake ID does not already exist
-    When createStake(staker, id, amount, daysLock, isFromClaim) is called
-    Then stake should be created successfully
-    And all state updates should occur correctly
-    And events should be emitted
-
-  Scenario: Direct createStake call without role
+  Scenario: Unauthorized reward granting
     Given caller does not have CONTROLLER_ROLE
-    When createStake is called directly
-    Then transaction should revert with AccessControl error
-
-  Scenario: Duplicate stake ID prevention
-    Given stake ID already exists
-    When createStake is called with same ID
-    Then transaction should revert with StakeAlreadyExists error
+    When grantReward is called
+    Then transaction should revert with access control error
 ```
 
-### TC35: Stake ID Generation Validation
+### TC_R14: Reward Storage - Batch Claiming (UC26)
 
 ```gherkin
-Feature: Stake ID Generation
-  Scenario: Deterministic stake ID generation
-    Given specific staker and stakesCount
-    When stake() is called multiple times
-    Then stake IDs should be deterministic and unique
-    And should follow keccak256(abi.encode(staker, stakesCount)) pattern
+Feature: Batch Claiming State Management
+  Scenario: Mark multiple rewards as claimed
+    Given user has multiple unclaimed rewards
+    And valid reward indices are provided
+    When batchMarkClaimed(user, indices[]) is called
+    Then specified rewards should be marked as claimed
+    And total amount should be calculated
+    And BatchRewardsClaimed event should be emitted
+    And state should be consistent
 
-  Scenario: Stake ID collision prevention
-    Given high volume of stakes from same staker
-    When stakes are created sequentially
-    Then no stake ID collisions should occur
-    And stakesCount should increment correctly
+  Scenario: Partial batch claiming with some already claimed
+    Given batch includes some already-claimed rewards
+    When batchMarkClaimed is called
+    Then only unclaimed rewards should be processed
+    And already-claimed rewards should be skipped
+    And operation should succeed partially
 ```
 
-### TC36: Day Calculation Edge Cases
+### TC_R15: Reward Storage - User Queries (UC26)
 
 ```gherkin
-Feature: Day Calculation Precision
-  Scenario: Day boundary transitions
-    Given block.timestamp is near day boundary (86399 seconds)
-    When stake operations occur across day transition
-    Then day calculations should be consistent
-    And maturity checks should be accurate
+Feature: User Reward Information
+  Scenario: Get user's complete reward history
+    Given user has rewards from multiple strategies/epochs
+    When getUserRewards(user) is called
+    Then complete reward array should be returned
+    And all reward details should be accurate
+    And claimed status should be correct
 
-  Scenario: Maximum day values
-    Given stakes with maximum uint16 daysLock (65535)
-    When maturity calculations are performed
-    Then no overflow should occur
-    And calculations should remain accurate
+  Scenario: Get user's claimable amount
+    Given user has mix of claimed and unclaimed rewards
+    When getUserClaimableAmount(user) is called
+    Then total of unclaimed rewards should be returned
+    And calculation should be accurate
 
-  Scenario: Same-day multiple operations
-    Given multiple stakes and unstakes occur same day
-    When day-based operations are performed
-    Then all should use consistent day value
-    And checkpoints should be managed correctly
+  Scenario: Get claimable rewards with indices optimization
+    Given user has large reward history
+    When getUserClaimableRewards is called
+    Then only unclaimed rewards should be returned with indices
+    And optimization should start from nextClaimableIndex
+    And results should be paginated efficiently
 ```
 
-### TC37: Binary Search Algorithm Validation
+### TC_R16: Strategy Implementation - Linear APR (UC23)
 
 ```gherkin
-Feature: Checkpoint Binary Search
-  Scenario: Empty checkpoint array
-    Given staker has no checkpoints
-    When getStakerBalanceAt is called
-    Then should return zero balance
-    And should not revert
+Feature: Linear APR Strategy Calculations
+  Scenario: Calculate historical APR rewards
+    Given stake is applicable to strategy period
+    And annual rate is configured (e.g., 1000 basis points = 10%)
+    When calculateHistoricalReward(staker, stakeId, fromDay, toDay) is called
+    Then reward should equal (amount × rate × days) / (365 × 10000)
+    And calculation should handle partial periods
+    And unstaking should be considered for end period
+    And precision should be maintained
 
-  Scenario: Single checkpoint
-    Given staker has exactly one checkpoint
-    When querying balance before, at, and after checkpoint
-    Then results should be correct for all cases
+  Scenario: Calculate reward for non-applicable stake
+    Given stake is outside strategy period
+    When calculateHistoricalReward is called
+    Then reward should be zero
 
-  Scenario: Checkpoint exact match
-    Given checkpoint exists for exact target day
-    When getStakerBalanceAt is called for that day
-    Then should return exact checkpoint value
-    And should not use binary search interpolation
-
-  Scenario: Large checkpoint array performance
-    Given staker has 1000+ checkpoints
-    When historical balance query is performed
-    Then operation should complete in O(log n) time
-    And gas usage should remain reasonable
+  Scenario: Calculate reward with strategy period limits
+    Given stake spans beyond strategy end date
+    When reward calculation is performed
+    Then calculation should use min(toDay, strategyEndDay)
+    And reward should be prorated correctly
 ```
 
-### TC38: Staker Registration System
+### TC_R17: Strategy Implementation - Epoch Pool (UC24)
 
 ```gherkin
-Feature: Staker Registration
-  Scenario: First-time staker registration
-    Given address has never staked before
-    When first stake is created
-    Then staker should be registered in allStakers array
-    And isStakerRegistered should be set to true
-    And totalStakersCount should increment
+Feature: Epoch Pool Strategy Distribution
+  Scenario: Calculate proportional epoch reward
+    Given user weight and total epoch weight are known
+    And pool size is set
+    When calculateEpochReward is called
+    Then reward should equal (userWeight × poolSize) / totalWeight
+    And calculation should handle zero total weight
+    And precision should be maintained
 
-  Scenario: Existing staker additional stakes
-    Given staker is already registered
-    When additional stakes are created
-    Then staker should not be re-registered
-    And allStakers array should not grow
-    And stakesCount should increment
-
-  Scenario: Staker enumeration consistency
-    Given multiple unique stakers exist
-    When getStakersPaginated is called
-    Then results should match registered stakers
-    And pagination should cover all stakers exactly once
+  Scenario: Validate epoch participation
+    Given stake period and epoch period
+    When validateEpochParticipation is called
+    Then should return true if stake overlaps with epoch
+    And should handle unstaked positions correctly
+    And should validate time boundaries
 ```
 
-### TC39: Checkpoint System Internal Logic
+### TC_R18: Access Control - Reward System (UC21-UC26)
 
 ```gherkin
-Feature: Checkpoint Creation and Management
-  Scenario: Multiple balance changes same day
-    Given staker performs multiple operations same day
-    When balance changes occur
-    Then only latest checkpoint should exist for that day
-    And checkpoint should reflect final balance
-    And checkpoint array should remain sorted
+Feature: Reward System Access Control
+  Scenario: Admin functions access control
+    Given various users with different roles
+    When admin-only functions are called
+    Then only users with ADMIN_ROLE should succeed
+    And others should revert with access control error
+    And this applies to: strategy management, epoch management, reward calculation
 
-  Scenario: Checkpoint array sorting validation
-    Given balance changes occur on different days out of order
-    When checkpoints are created
-    Then checkpoint array should maintain sorted order
-    And binary search should function correctly
+  Scenario: Controller functions access control
+    Given RewardManager needs to control GrantedRewardStorage
+    When CONTROLLER_ROLE functions are called
+    Then only RewardManager should succeed
+    And direct access should be prevented
 
-  Scenario: Balance delta calculations
-    Given stake and unstake operations
-    When checkpoint updates occur
-    Then positive and negative deltas should be applied correctly
-    And final balances should be accurate
-    And underflow should be prevented
+  Scenario: User functions public access
+    Given any user
+    When public query functions are called
+    Then access should be allowed for all users
+    And no access control restrictions
 ```
 
-### TC40: Daily Snapshot Accuracy
+### TC_R19: Emergency Controls (UC Security)
 
 ```gherkin
-Feature: Daily Snapshot System
-  Scenario: Multi-operation daily aggregation
-    Given multiple stakes and unstakes occur same day
-    When daily snapshot is updated
-    Then total amount should match sum of operations
-    And stakes count should reflect net change
-    And snapshot should be consistent with individual balances
+Feature: Reward System Emergency Controls
+  Scenario: Emergency pause reward system
+    Given reward system is operating normally
+    And admin detects security issue
+    When admin calls emergencyPause()
+    Then reward system should be paused
+    And claiming should be blocked
+    And calculations should be blocked
 
-  Scenario: Snapshot historical consistency
-    Given operations occurred over multiple days
-    When daily snapshots are queried
-    Then each snapshot should reflect accurate daily state
-    And snapshots should be consistent with checkpoint data
+  Scenario: Resume from emergency pause
+    Given reward system is paused
+    When admin calls emergencyResume()
+    Then system should resume normal operations
+    And all functions should work again
 ```
 
-### TC41: Storage Input Validation
+### TC_R20: Reentrancy Protection - Rewards (UC25)
 
 ```gherkin
-Feature: Storage Function Parameter Validation
-  Scenario: Zero address validation
-    Given zero address is passed as staker
-    When storage functions are called
-    Then functions should handle gracefully or revert appropriately
+Feature: Reward Claiming Reentrancy Protection
+  Scenario: Attempt reentrancy during claiming
+    Given malicious token contract attempts reentrancy
+    When claiming operation is in progress
+    Then reentrancy attempt should be blocked
+    And state should remain consistent
+    And claiming should complete safely
 
-  Scenario: Parameter boundary testing
-    Given maximum values for uint128 amount and uint16 daysLock
-    When createStake is called
-    Then operation should succeed without overflow
-    And calculations should remain accurate
-
-  Scenario: Binary search edge case handling
-    Given edge case checkpoint scenarios
-    When getStakerBalanceAt is called
-    Then binary search should handle all edge cases correctly
-    And should never return incorrect results
+  Scenario: Normal claiming with reentrancy protection
+    Given standard ERC20 token
+    When normal claiming occurs
+    Then operations should work correctly
+    And protection should not interfere
 ```
 
-### TC42: Cross-Contract Event Coordination
+### TC_R21: Mathematical Precision (UC23, UC24)
 
 ```gherkin
-Feature: Event Emission Coordination
-  Scenario: Vault and Storage event synchronization
-    Given stake operation is performed
-    When operation completes
-    Then both StakingVault and StakingStorage should emit events
-    And event parameters should be consistent
-    And event ordering should be correct
+Feature: Reward Calculation Precision
+  Scenario: Large number handling in calculations
+    Given very large stake amounts and long periods
+    When reward calculations are performed
+    Then calculations should not overflow
+    And precision should be maintained within acceptable bounds
+    And rounding should be consistent
 
-  Scenario: CheckpointCreated event verification
-    Given balance change occurs
-    When checkpoint is created
-    Then CheckpointCreated event should be emitted with correct parameters
-    And event should include staker, day, balance, stakesCount
+  Scenario: Division precision in pool distributions
+    Given pool distribution with prime numbers
+    When rewards are calculated for many users
+    Then total distributed should not exceed pool size
+    And precision loss should be minimized
+    And edge cases should be handled gracefully
+
+  Scenario: Zero values and edge cases
+    Given edge case inputs (zero amounts, zero periods)
+    When calculations are performed
+    Then system should handle gracefully
+    And should not revert unexpectedly
+    And results should be mathematically correct
 ```
 
-### TC43: Gas Limit Edge Cases
+### TC_R22: Integration - Rewards with Staking Data (UC23, UC24)
 
 ```gherkin
-Feature: Gas Limit Handling
-  Scenario: Maximum array size operations
-    Given pagination with maximum practical limit
-    When getStakersPaginated is called
-    Then operation should complete within gas limits
-    And results should be accurate
+Feature: Reward System Integration with Staking
+  Scenario: Use historical staking data for rewards
+    Given users have complex staking history
+    And multiple stakes with different time periods
+    When reward calculations access staking data
+    Then historical balances should be accurate
+    And checkpoint system should provide correct data
+    And calculations should match actual staking behavior
 
-  Scenario: Large batch operations
-    Given batch operations with large arrays
-    When batchGetStakerBalances is called
-    Then operation should succeed or fail gracefully
-    And partial results should not corrupt state
-
-  Scenario: Checkpoint traversal gas limits
-    Given very large checkpoint arrays
-    When binary search is performed
-    Then operation should complete efficiently
-    And gas usage should be predictable
+  Scenario: Real-time staking during active epochs
+    Given epoch is currently active
+    When users stake and unstake during epoch
+    Then weight calculations should reflect real-time changes
+    And epoch statistics should be accurate
+    And integration should be seamless
 ```
+
+### TC_R23: Performance - Large Scale Operations (UC23, UC24)
+
+```gherkin
+Feature: Reward System Scalability
+  Scenario: Process rewards for 1000+ users
+    Given large user base with many stakes
+    When batch reward processing is performed
+    Then operations should complete within gas limits
+    And pagination should work efficiently
+    And state should remain consistent
+    And processing should be deterministic
+
+  Scenario: Handle large reward histories
+    Given users with 100+ reward entries
+    When claiming operations are performed
+    Then queries should remain efficient
+    And claiming should work correctly
+    And index optimization should function
+```
+
+### TC_R24: Strategy Parameter Updates (UC21)
+
+```gherkin
+Feature: Dynamic Strategy Configuration
+  Scenario: Update strategy parameters by manager
+    Given strategy manager wants to change parameters
+    And manager has proper permissions
+    When updateParameters(newParams[]) is called
+    Then strategy parameters should be updated
+    And new calculations should use new parameters
+    And old calculations should remain unchanged
+
+  Scenario: Unauthorized parameter update
+    Given caller is not strategy manager
+    When updateParameters is called
+    Then transaction should revert with OnlyManagerCanUpdate error
+```
+
+### TC_R25: Multi-Token Reward Support (UC Future)
+
+```gherkin
+Feature: Different Reward Tokens
+  Scenario: Reward funding with different tokens
+    Given reward system supports multiple tokens
+    When rewards are funded with different ERC20 tokens
+    Then funding should be tracked separately
+    And claiming should work for each token type
+    And accounting should be accurate per token
+
+  Scenario: Cross-token reward calculations
+    Given rewards in different tokens
+    When users claim rewards
+    Then correct tokens should be transferred
+    And amounts should be accurate per token type
+```
+
+### TC_R26: Reward Vesting (UC Future)
+
+```gherkin
+Feature: Time-Locked Reward Vesting
+  Scenario: Rewards with vesting schedules
+    Given rewards are granted with vesting period
+    When users attempt to claim before vesting
+    Then claims should be restricted appropriately
+    And vested portions should be claimable
+    And unvested portions should remain locked
+
+  Scenario: Vesting schedule calculations
+    Given linear vesting over time period
+    When vesting calculations are performed
+    Then available amounts should be accurate
+    And time-based calculations should be correct
+```
+
+### TC_R27: Reward Boost System (UC Future)
+
+```gherkin
+Feature: Multiplier-Based Reward Boosts
+  Scenario: Apply multipliers based on stake duration
+    Given stakes with different lock periods
+    And boost multipliers are configured
+    When rewards are calculated
+    Then longer locks should receive higher multipliers
+    And calculations should be accurate
+    And boosts should compound correctly
+
+  Scenario: Governance participation boosts
+    Given users participate in governance
+    When reward calculations include governance boost
+    Then additional rewards should be granted
+    And boost tracking should be accurate
+```
+
+### TC_R28: Advanced Error Recovery (UC Error Handling)
+
+```gherkin
+Feature: Reward System Error Recovery
+  Scenario: Recovery from partial batch failures
+    Given batch operation fails partially
+    When recovery procedures are executed
+    Then completed operations should remain valid
+    And failed operations should be identifiable
+    And system should return to consistent state
+
+  Scenario: Strategy malfunction handling
+    Given strategy contract has bug or reverts
+    When reward calculations encounter strategy errors
+    Then system should handle gracefully
+    And other strategies should continue working
+    And error should be logged appropriately
+```
+
+### TC_R29: Reward Analytics and Reporting (UC Analytics)
+
+```gherkin
+Feature: Reward System Analytics
+  Scenario: Generate reward distribution reports
+    Given epoch has completed with rewards distributed
+    When analytics queries are performed
+    Then total rewards per strategy should be accurate
+    And user participation statistics should be correct
+    And distribution fairness should be verifiable
+
+  Scenario: Historical reward performance
+    Given multiple epochs and strategies have completed
+    When historical analysis is performed
+    Then reward trends should be queryable
+    And strategy performance should be comparable
+    And data should support governance decisions
+```
+
+### TC_R30: Cross-System Event Coordination (UC Integration)
+
+```gherkin
+Feature: Reward System Event Integration
+  Scenario: Coordinated event emission across contracts
+    Given reward operations span multiple contracts
+    When operations complete
+    Then events should be emitted in correct order
+    And event data should be consistent
+    And off-chain systems should receive complete information
+
+  Scenario: Event-driven off-chain integration
+    Given off-chain systems monitor reward events
+    When reward operations occur
+    Then events should provide sufficient data for indexing
+    And event parameters should be accurate
+    And integration should be reliable
+```
+
+## GRANTED REWARD STORAGE TESTS (MISSING)
+
+### TC_GRS01: Grant Reward Operations (UC26)
+
+```gherkin
+Feature: Reward Grant Management
+  Scenario: Successfully grant reward to user
+    Given caller has CONTROLLER_ROLE
+    And reward parameters are valid (user, strategyId, version, amount, epochId)
+    And amount is greater than zero
+    When grantReward(user, strategyId, version, amount, epochId) is called
+    Then reward should be added to user's reward array
+    And reward should be marked as unclaimed
+    And RewardGranted event should be emitted with correct parameters
+    And reward should be queryable via getUserRewards()
+
+  Scenario: Grant reward with zero amount
+    Given caller has CONTROLLER_ROLE
+    And amount is zero
+    When grantReward is called with zero amount
+    Then operation should complete (zero rewards are valid)
+    And reward should be recorded with amount = 0
+
+  Scenario: Grant reward with maximum uint128 amount
+    Given caller has CONTROLLER_ROLE  
+    And amount is type(uint128).max
+    When grantReward is called
+    Then operation should complete without overflow
+    And reward should be recorded accurately
+
+  Scenario: Unauthorized reward granting
+    Given caller does not have CONTROLLER_ROLE
+    When grantReward is called
+    Then transaction should revert with access control error
+    And no reward should be granted
+```
+
+### TC_GRS02: Single Reward Claiming (UC26)
+
+```gherkin
+Feature: Single Reward Claiming State Management
+  Scenario: Successfully mark single reward as claimed
+    Given user has unclaimed rewards
+    And caller has CONTROLLER_ROLE
+    And reward index is valid
+    When markRewardClaimed(user, rewardIndex) is called
+    Then reward at index should be marked as claimed
+    And RewardClaimed event should be emitted with user, index, amount
+    And reward should no longer appear in claimable queries
+
+  Scenario: Mark already claimed reward as claimed
+    Given user has reward that is already claimed
+    When markRewardClaimed is called for same reward
+    Then transaction should revert with RewardAlreadyClaimed error
+    And error should include the reward index
+
+  Scenario: Mark reward with invalid index
+    Given user has rewards array of length N
+    When markRewardClaimed is called with index >= N
+    Then transaction should revert with array bounds error
+
+  Scenario: Unauthorized reward claiming
+    Given caller does not have CONTROLLER_ROLE
+    When markRewardClaimed is called
+    Then transaction should revert with access control error
+```
+
+### TC_GRS03: Batch Reward Claiming (UC26)
+
+```gherkin
+Feature: Batch Reward Claiming State Management
+  Scenario: Successfully mark multiple rewards as claimed
+    Given user has multiple unclaimed rewards
+    And caller has CONTROLLER_ROLE
+    And reward indices array contains valid indices
+    When batchMarkClaimed(user, indices[]) is called
+    Then all specified rewards should be marked as claimed
+    And BatchRewardsClaimed event should be emitted
+    And event should include total amount and count of claimed rewards
+
+  Scenario: Batch claim with mix of claimed and unclaimed rewards
+    Given batch includes some already-claimed rewards
+    When batchMarkClaimed is called
+    Then only unclaimed rewards should be processed
+    And already-claimed rewards should be skipped silently
+    And event should reflect only newly claimed rewards
+
+  Scenario: Batch claim with empty array
+    Given indices array is empty
+    When batchMarkClaimed is called
+    Then operation should complete without error
+    And BatchRewardsClaimed event should show zero amount and count
+
+  Scenario: Batch claim with duplicate indices
+    Given indices array contains duplicate values
+    When batchMarkClaimed is called
+    Then each reward should only be claimed once
+    And subsequent attempts on same index should be skipped
+```
+
+### TC_GRS04: User Rewards Retrieval (UC26)
+
+```gherkin
+Feature: User Reward History Queries
+  Scenario: Get rewards for user with no rewards
+    Given user has never received any rewards
+    When getUserRewards(user) is called
+    Then empty array should be returned
+    And function should not revert
+
+  Scenario: Get rewards for user with single reward
+    Given user has been granted one reward
+    When getUserRewards is called
+    Then array with single reward should be returned
+    And reward data should match granted parameters
+
+  Scenario: Get rewards for user with multiple rewards
+    Given user has been granted multiple rewards from different strategies/epochs
+    When getUserRewards is called
+    Then complete array should be returned in chronological order
+    And all reward details should be accurate
+
+  Scenario: Get rewards with mix of claimed and unclaimed
+    Given user has mix of claimed and unclaimed rewards
+    When getUserRewards is called
+    Then all rewards should be returned regardless of claimed status
+    And claimed flags should be accurate
+```
+
+### TC_GRS05: Claimable Amount Calculation (UC26)
+
+```gherkin
+Feature: Claimable Amount Calculation
+  Scenario: Calculate claimable amount for user with no rewards
+    Given user has no rewards
+    When getUserClaimableAmount(user) is called
+    Then zero should be returned
+
+  Scenario: Calculate claimable amount for user with all rewards claimed
+    Given user has rewards but all are marked as claimed
+    When getUserClaimableAmount is called
+    Then zero should be returned
+
+  Scenario: Calculate claimable amount for user with all rewards unclaimed
+    Given user has multiple unclaimed rewards with amounts [100, 200, 300]
+    When getUserClaimableAmount is called
+    Then 600 should be returned (sum of all amounts)
+
+  Scenario: Calculate claimable amount with mix of claimed/unclaimed
+    Given user has rewards: [100 claimed, 200 unclaimed, 300 unclaimed]
+    When getUserClaimableAmount is called
+    Then 500 should be returned (sum of unclaimed only)
+
+  Scenario: Calculate claimable amount with large numbers
+    Given user has unclaimed rewards near uint128 maximum
+    When getUserClaimableAmount is called
+    Then calculation should not overflow
+    And accurate sum should be returned
+```
+
+### TC_GRS06: Claimable Rewards with Indices (UC26)
+
+```gherkin
+Feature: Claimable Rewards Query with Index Optimization
+  Scenario: Get claimable rewards for user with no rewards
+    Given user has no rewards
+    When getUserClaimableRewards(user) is called
+    Then empty arrays should be returned for both rewards and indices
+
+  Scenario: Get claimable rewards for user with all rewards claimed
+    Given user has rewards but all are claimed
+    When getUserClaimableRewards is called
+    Then empty arrays should be returned
+
+  Scenario: Get claimable rewards with nextClaimableIndex optimization
+    Given user has 100 rewards where first 50 are claimed
+    And _nextClaimableIndex[user] is 50
+    When getUserClaimableRewards is called
+    Then function should start checking from index 50
+    And should return unclaimed rewards from index 50 onwards with correct indices
+
+  Scenario: Get claimable rewards with mixed claimed status
+    Given user has rewards [claimed, unclaimed, claimed, unclaimed]
+    When getUserClaimableRewards is called
+    Then should return unclaimed rewards with indices [1, 3]
+    And reward data should match those at indices 1 and 3
+```
+
+### TC_GRS07: Epoch-Specific Rewards (UC26)
+
+```gherkin
+Feature: Epoch-Specific Reward Queries
+  Scenario: Get rewards for epoch with no rewards
+    Given user has no rewards from specified epochId
+    When getUserEpochRewards(user, epochId) is called
+    Then empty array should be returned
+
+  Scenario: Get rewards for specific epoch with multiple rewards
+    Given user has rewards from epochs [1, 2, 1, 3, 2]
+    When getUserEpochRewards(user, 2) is called
+    Then should return rewards from positions [1, 4] (epoch 2 rewards only)
+
+  Scenario: Get immediate rewards (epoch 0)
+    Given user has mix of immediate rewards (epochId = 0) and epoch rewards
+    When getUserEpochRewards(user, 0) is called
+    Then should return only immediate rewards with epochId = 0
+
+  Scenario: Get rewards for non-existent epoch
+    Given no rewards exist for specified epochId
+    When getUserEpochRewards is called
+    Then empty array should be returned
+    And function should not revert
+```
+
+### TC_GRS08: Paginated Rewards (UC26)
+
+```gherkin
+Feature: Paginated Reward Queries
+  Scenario: Get paginated rewards with valid offset and limit
+    Given user has 100 rewards
+    When getUserRewardsPaginated(user, 20, 10) is called
+    Then should return rewards from indices 20-29 (10 items)
+    And returned array should have length 10
+
+  Scenario: Get paginated rewards with offset beyond array length
+    Given user has 50 rewards
+    When getUserRewardsPaginated(user, 100, 10) is called
+    Then empty array should be returned
+    And function should not revert
+
+  Scenario: Get paginated rewards with limit exceeding remaining items
+    Given user has 50 rewards
+    When getUserRewardsPaginated(user, 45, 10) is called
+    Then should return rewards from indices 45-49 (5 items)
+    And returned array should have length 5
+
+  Scenario: Get paginated rewards with zero limit
+    Given user has rewards
+    When getUserRewardsPaginated(user, 0, 0) is called
+    Then empty array should be returned
+
+  Scenario: Pagination boundary conditions
+    Given user has exactly 10 rewards
+    When getUserRewardsPaginated(user, 0, 10) is called
+    Then should return all 10 rewards
+    When getUserRewardsPaginated(user, 10, 10) is called
+    Then should return empty array
+```
+
+### TC_GRS09: Next Claimable Index Management (UC26)
+
+```gherkin
+Feature: Claiming Index Optimization
+  Scenario: Update index after claiming first reward
+    Given user has rewards [unclaimed, unclaimed, unclaimed]
+    And _nextClaimableIndex[user] is 0
+    When first reward is claimed and updateNextClaimableIndex is called
+    Then _nextClaimableIndex[user] should remain 0 (still unclaimed rewards from start)
+
+  Scenario: Update index after claiming first few rewards
+    Given user has rewards [claimed, claimed, unclaimed, unclaimed]
+    When updateNextClaimableIndex(user) is called
+    Then _nextClaimableIndex[user] should be set to 2 (first unclaimed index)
+
+  Scenario: Update index when all rewards are claimed
+    Given user has rewards and all are claimed
+    When updateNextClaimableIndex is called
+    Then _nextClaimableIndex[user] should be set to array length
+    And subsequent getUserClaimableRewards should return empty quickly
+
+  Scenario: Update index for user with no rewards
+    Given user has no rewards
+    When updateNextClaimableIndex is called
+    Then _nextClaimableIndex[user] should be 0
+    And function should not revert
+
+  Scenario: Unauthorized index update
+    Given caller does not have CONTROLLER_ROLE
+    When updateNextClaimableIndex is called
+    Then transaction should revert with access control error
+```
+
+## FLAG SYSTEM TESTS (MISSING)
+
+### TC_F01: Basic Flag Operations (UC20)
+
+```gherkin
+Feature: Flag Library Operations
+  Scenario: Set flag bit
+    Given flag value starts at 0
+    When Flags.set(flags, bitPosition) is called
+    Then specified bit should be set to 1
+    And other bits should remain unchanged
+    And result should be returned
+
+  Scenario: Unset flag bit
+    Given flag has specific bit set
+    When Flags.unset(flags, bitPosition) is called
+    Then specified bit should be set to 0
+    And other bits should remain unchanged
+
+  Scenario: Check flag bit status
+    Given flags with various bits set
+    When Flags.isSet(flags, bitPosition) is called
+    Then should return true if bit is set
+    And should return false if bit is unset
+    And should handle all 16 bit positions
+```
+
+### TC_F02: Stake Flag Integration (UC20)
+
+```gherkin
+Feature: Stake Flag Usage
+  Scenario: Mark stake as from claim
+    Given stake is created via stakeFromClaim
+    When stake flags are checked
+    Then IS_FROM_CLAIM_BIT should be set
+    And flag should be queryable via Flags.isSet
+    And stake should be identifiable as claim-originated
+
+  Scenario: Regular stake flag handling
+    Given stake is created via regular stake()
+    When stake flags are checked
+    Then IS_FROM_CLAIM_BIT should not be set
+    And other flag bits should be available for future use
+    And flag operations should work correctly
+
+  Scenario: Multiple flag combinations
+    Given stake needs multiple property flags
+    When multiple flags are set simultaneously
+    Then all flags should be maintained correctly
+    And individual flags should be queryable
+    And combinations should work as expected
+```
+
+### TC_F03: Flag System Extensibility (UC20)
+
+```gherkin
+Feature: Future Flag Extensions
+  Scenario: Add new flag types
+    Given system needs new stake properties
+    When new flag constants are defined
+    Then new flags should work with existing system
+    And should not interfere with existing flags
+    And should be backward compatible
+
+  Scenario: Flag boundary conditions
+    Given flags using all 16 available bits
+    When flag operations are performed
+    Then all bit positions should work correctly
+    And should handle edge cases (bit 0, bit 15)
+    And should not overflow or corrupt data
+
+  Scenario: Flag persistence and queries
+    Given stakes with various flag combinations
+    When stakes are queried after time
+    Then flags should persist correctly
+    And should be queryable efficiently
+    And should support filtering and analytics
+```
+
+## CROSS-SYSTEM INTEGRATION TESTS (CRITICAL)
+
+### TC_I01: Basic Staking-Reward Data Integration (UC Integration)
+
+```gherkin
+Feature: Simplified Historical Data Integration
+  Scenario: Basic reward calculation using staking data
+    Given users have staking history
+    When reward calculations are performed
+    Then calculations should use accurate staking balances
+    And results should match staking behavior
+```
+
+### TC_I02: Basic Multi-User Reward Distribution (UC Integration)
+
+```gherkin
+Feature: Simplified Multi-User Operations
+  Scenario: Basic batch reward processing
+    Given multiple users with active stakes
+    When batch reward processing occurs
+    Then all eligible users should receive correct rewards
+    And state should remain consistent
+```
+
+### TC_I03: Basic Real-Time Staking During Epochs (UC Integration)
+
+```gherkin
+Feature: Simplified Dynamic Staking
+  Scenario: Basic stake during active epoch
+    Given epoch is currently active
+    When user stakes tokens during epoch period
+    Then stake should be properly accounted for in rewards
+    And calculations should be correct
+```
+
+### TC_I04: Basic End-to-End User Journey (UC Integration)
+
+```gherkin
+Feature: Simplified User Experience Flow
+  Scenario: Basic stake, earn, claim workflow
+    Given user starts with tokens
+    When user stakes, earns rewards, and claims
+    Then all operations should work correctly
+    And user should receive expected rewards
+    And state should be consistent
+```
+
+### TC_I05: Basic Cross-Contract Event Coordination (UC Integration)
+
+```gherkin
+Feature: Simplified Event Coordination
+  Scenario: Basic event coordination
+    Given operations span multiple contracts
+    When operations complete
+    Then events should be emitted correctly
+    And event data should be consistent
+```
+
+### TC_I06: Basic System State Consistency (UC Integration)
+
+```gherkin
+Feature: Simplified State Validation
+  Scenario: Basic state consistency validation
+    Given multiple operations across system components
+    When operations complete
+    Then total staked should equal sum of individual stakes
+    And basic invariants should hold
+```
+
+### TC_I07: Basic System Evolution Support (UC Future)
+
+```gherkin
+Feature: Simplified System Evolution
+  Scenario: Basic extensibility validation
+    Given system needs to support new features
+    When new components are added
+    Then existing functionality should continue working
+    And integration should be possible
+```
+
 
 ---
 
-## Test Implementation Guidelines
+## Summary
 
-### Priority Levels
+This document defines **62 focused test cases** for the complete Token Staking System:
 
-- **Critical**: TC1, TC2, TC3, TC6, TC11, TC23, TC24, TC27, TC34, TC35, TC37, TC39 (Core functionality and security)
-- **High**: TC4, TC5, TC8, TC9, TC13-TC17, TC19-TC22, TC25, TC26, TC36, TC38, TC40, TC41 (Important features and validations)
-- **Medium**: TC7, TC10, TC12, TC18, TC28-TC31, TC42, TC43 (Edge cases and optimizations)
-- **Low**: TC32, TC33 (Events and gas optimization verification)
+- **Core Staking Tests (TC1-TC28)**: 28 test cases covering StakingVault and StakingStorage with focus on business logic
+- **Reward System Tests (TC_R01-TC_R30)**: 30 test cases covering complete reward functionality  
+- **Flag System Tests (TC_F01-TC_F03)**: 3 test cases for extensible flag operations
+- **Integration Tests (TC_I01-TC_I07)**: 7 simplified test cases for cross-system integration
 
-### Test Categories
-
-1. **Unit Tests**: Individual function testing (TC1-TC5, TC13-TC17, TC34-TC35, TC38, TC41)
-2. **Integration Tests**: Contract interaction testing (TC27, TC28, TC42)
-3. **Security Tests**: Attack vector testing (TC23, TC24, TC34)
-4. **Edge Case Tests**: Boundary condition testing (TC29-TC31, TC36-TC37, TC39-TC41, TC43)
-5. **Performance Tests**: Gas and efficiency testing (TC33, TC37, TC43)
-
-### Coverage Requirements
-
-- **Function Coverage**: 100% of public/external functions
-- **Branch Coverage**: 100% of conditional logic paths
-- **Edge Case Coverage**: All error conditions and boundary cases
-- **Integration Coverage**: All contract interactions
-- **Event Coverage**: All event emissions verified
-
-### Notes for Test Implementation
-
-1. Tests should be implemented using Foundry framework
-2. Use proper setup/teardown for consistent test state
-3. Mock external dependencies where appropriate
-4. Implement helper functions for common operations
-5. Use fuzz testing for numeric edge cases
-6. Verify gas usage doesn't exceed expected limits
-7. Test both success and failure scenarios for each function
+Each test case focuses on business logic and core functionality rather than implementation details or external library testing. The test cases provide practical coverage of all use cases defined in `use_cases.md` and ensure the system is audit-ready without over-engineering.

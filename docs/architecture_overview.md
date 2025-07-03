@@ -1,50 +1,95 @@
-# Token Staking: Architecture Overview
+# Token Staking System: Architecture Overview
 
 ## System Architecture
 
-The Token staking system follows a modular architecture with clear separation of concerns between business logic and data storage. This design ensures security, efficiency, and maintainability.
+The Token staking system features a modular architecture with clear separation of concerns across core staking functionality and reward management. The design emphasizes security, gas efficiency, and maintainability while supporting both immediate and epoch-based reward strategies.
 
 ### Core Components
 
-#### 1. StakingVault (Business Logic Layer)
+#### 1. Staking Core System
 
+##### StakingVault (Business Logic Layer)
 **Location**: `src/StakingVault.sol`
 **Role**: Primary interface contract that handles all user interactions and business logic.
 
 **Key Responsibilities**:
-
 - **Token Management**: Handles IERC20 token transfers (deposits/withdrawals)
-- **Stake Operations**: Creates and processes stake/unstake requests
+- **Stake Operations**: Creates and processes stake/unstake requests with compound stakeId generation
 - **Time Lock Enforcement**: Validates stake maturity before allowing unstaking
 - **Access Control**: Role-based permissions (Admin, Manager, Claim Contract)
 - **Security**: Reentrancy protection, pause mechanism, emergency controls
 
-**Key Features**:
-
-- Immutable references to token and storage contracts
-- Support for both direct staking and claim contract integration
-- Emergency token recovery functionality
-- Comprehensive event emission for transparency
-
-#### 2. StakingStorage (Data Persistence Layer)
-
+##### StakingStorage (Data Persistence Layer)
 **Location**: `src/StakingStorage.sol`
 **Role**: Dedicated storage contract that maintains all staking data and historical records.
 
 **Key Responsibilities**:
-
-- **Stake Management**: Creates, tracks, and manages individual stakes
-- **Historical Data**: Maintains comprehensive checkpoint system
+- **Compound StakeId Management**: Generates unique stake identifiers using address + counter
+- **Stake Flags System**: Extensible `uint16 flags` field for multiple boolean properties
+- **Historical Data**: Maintains comprehensive checkpoint system with O(log n) queries
 - **Balance Tracking**: Real-time and historical balance calculations
-- **Global Statistics**: Network-wide staking metrics and snapshots
-- **Efficient Queries**: Optimized data retrieval with binary search algorithms
+- **Global Statistics**: Network-wide staking metrics and daily snapshots
 
-**Advanced Data Structures**:
+#### 2. Reward Management System
 
-- Checkpoint system for historical balance queries
-- Binary search optimization for efficient historical lookups
-- Paginated data access for large datasets
-- Comprehensive daily snapshots for analytics
+##### RewardManager (Orchestration Layer)
+**Location**: `src/reward-system/RewardManager.sol`
+**Role**: Central coordinator for all reward calculations and claiming operations.
+
+**Key Features**:
+- **Dual Strategy Support**: Handles both immediate (APR-style) and epoch-based (pool) rewards
+- **Gas Optimization**: Pre-calculation pattern reduces user gas costs by 30x
+- **Batch Processing**: Efficient handling of large user sets
+- **Integrated Calculations**: Direct integration with staking storage for epoch weight calculations
+
+##### Strategy System
+**Base Interfaces**:
+- `IBaseRewardStrategy`: Common functionality for all strategies
+- `IImmediateRewardStrategy`: APR-style reward calculations
+- `IEpochRewardStrategy`: Fixed pool distribution strategies
+
+**Strategy Registry**: Manages strategy registration, versioning, and activation
+**Epoch Manager**: Handles epoch lifecycle (announced → active → ended → calculated → finalized)
+
+#### 3. Interface Architecture
+
+##### Organized Interface Structure
+```
+src/interfaces/
+├── staking/
+│   ├── IStakingStorage.sol    # Core staking data interface
+│   └── StakeFlags.sol         # Flag management utilities
+└── reward/
+    ├── RewardEnums.sol        # Shared enumerations
+    ├── RewardErrors.sol       # Standardized error definitions
+    ├── IBaseRewardStrategy.sol
+    ├── IImmediateRewardStrategy.sol
+    └── IEpochRewardStrategy.sol
+```
+
+##### Advanced Data Structures
+
+**Compound StakeId System**:
+```solidity
+// 256-bit stakeId: [160-bit address][96-bit counter]
+function _generateStakeId(address staker, uint32 counter) internal pure returns (bytes32) {
+    return bytes32((uint256(uint160(staker)) << 96) | counter);
+}
+```
+
+**Extensible Flag System**:
+```solidity
+struct Stake {
+    uint128 amount;
+    uint16 stakeDay;
+    uint16 unstakeDay;
+    uint16 daysLock;
+    uint16 flags;  // Supports 16 boolean properties
+}
+```
+
+**Checkpoint System**: Binary search optimization for historical balance queries
+**Reward Storage**: Optimized struct packing for gas-efficient reward claiming
 
 ### Data Flow Architecture
 
