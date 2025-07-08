@@ -92,10 +92,7 @@ contract StakingStorageTest is Test {
 
         bytes32 stakeId = vault.stake(STAKE_AMOUNT, DAYS_LOCK);
 
-        StakingStorage.Stake memory stake = stakingStorage.getStake(
-            user1,
-            stakeId
-        );
+        StakingStorage.Stake memory stake = stakingStorage.getStake(stakeId);
 
         assertEq(stake.amount, STAKE_AMOUNT);
         assertEq(stake.daysLock, DAYS_LOCK);
@@ -307,10 +304,7 @@ contract StakingStorageTest is Test {
         bytes32 stakeId = vault.stake(STAKE_AMOUNT, DAYS_LOCK);
 
         // Verify stake was created in storage
-        StakingStorage.Stake memory stake = stakingStorage.getStake(
-            user1,
-            stakeId
-        );
+        StakingStorage.Stake memory stake = stakingStorage.getStake(stakeId);
         assertEq(stake.amount, STAKE_AMOUNT);
         assertEq(stake.daysLock, DAYS_LOCK);
 
@@ -330,7 +324,6 @@ contract StakingStorageTest is Test {
 
         // Verify data consistency across contracts
         StakingStorage.Stake memory unstakedStake = stakingStorage.getStake(
-            user1,
             stakeId
         );
         assertEq(unstakedStake.unstakeDay, uint16(block.timestamp / 1 days));
@@ -386,16 +379,46 @@ contract StakingStorageTest is Test {
         vault.unstake(stakeId);
 
         // Fast forward exactly 30 days
-        vm.warp(block.timestamp + DAYS_LOCK * 1 days);
+        vm.warp(block.timestamp + (DAYS_LOCK + 1) * 1 days);
 
         // Should be able to unstake when time lock expires
         vault.unstake(stakeId);
 
         // Verify time lock validation worked correctly
-        StakingStorage.Stake memory stake = stakingStorage.getStake(
-            user1,
-            stakeId
-        );
+        StakingStorage.Stake memory stake = stakingStorage.getStake(stakeId);
+        assertEq(stake.unstakeDay, uint16(block.timestamp / 1 days));
+
+        vm.stopPrank();
+    }
+
+    function test_TC28_BasicTimeLockValidation_just1day() public {
+        vm.startPrank(user1);
+
+        vm.warp(10 hours); // it's 10am
+
+        // Test realistic time lock boundaries (1 day)
+        bytes32 stakeId = vault.stake(STAKE_AMOUNT, 1);
+
+        StakingStorage.Stake memory stake = stakingStorage.getStake(stakeId);
+
+        vm.assertEq(stake.stakeDay, uint16(block.timestamp / 1 days));
+        vm.assertEq(stake.daysLock, 1);
+
+        // Should not be able to unstake before time lock expires
+        vm.expectRevert();
+        vault.unstake(stakeId);
+
+        uint256 currentTimestamp = block.timestamp;
+        // Fast forward less than 1 days
+        vm.warp(currentTimestamp + 2 days);
+
+        vm.assertEq(block.timestamp, currentTimestamp + 2 days);
+
+        // Should be able to unstake when time lock expires
+        vault.unstake(stakeId);
+
+        // Verify time lock validation worked correctly
+        stake = stakingStorage.getStake(stakeId);
         assertEq(stake.unstakeDay, uint16(block.timestamp / 1 days));
 
         vm.stopPrank();

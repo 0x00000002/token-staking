@@ -9,10 +9,12 @@ The Token staking system features a modular architecture with clear separation o
 #### 1. Staking Core System
 
 ##### StakingVault (Business Logic Layer)
+
 **Location**: `src/StakingVault.sol`
 **Role**: Primary interface contract that handles all user interactions and business logic.
 
 **Key Responsibilities**:
+
 - **Token Management**: Handles IERC20 token transfers (deposits/withdrawals)
 - **Stake Operations**: Creates and processes stake/unstake requests with compound stakeId generation
 - **Time Lock Enforcement**: Validates stake maturity before allowing unstaking
@@ -20,10 +22,12 @@ The Token staking system features a modular architecture with clear separation o
 - **Security**: Reentrancy protection, pause mechanism, emergency controls
 
 ##### StakingStorage (Data Persistence Layer)
+
 **Location**: `src/StakingStorage.sol`
 **Role**: Dedicated storage contract that maintains all staking data and historical records.
 
 **Key Responsibilities**:
+
 - **Compound StakeId Management**: Generates unique stake identifiers using address + counter
 - **Stake Flags System**: Extensible `uint16 flags` field for multiple boolean properties
 - **Historical Data**: Maintains comprehensive checkpoint system with O(log n) queries
@@ -33,17 +37,21 @@ The Token staking system features a modular architecture with clear separation o
 #### 2. Reward Management System
 
 ##### RewardManager (Orchestration Layer)
+
 **Location**: `src/reward-system/RewardManager.sol`
 **Role**: Central coordinator for all reward calculations and claiming operations.
 
 **Key Features**:
+
 - **Dual Strategy Support**: Handles both immediate (APR-style) and epoch-based (pool) rewards
 - **Gas Optimization**: Pre-calculation pattern reduces user gas costs by 30x
 - **Batch Processing**: Efficient handling of large user sets
 - **Integrated Calculations**: Direct integration with staking storage for epoch weight calculations
 
 ##### Strategy System
+
 **Base Interfaces**:
+
 - `IBaseRewardStrategy`: Common functionality for all strategies
 - `IImmediateRewardStrategy`: APR-style reward calculations
 - `IEpochRewardStrategy`: Fixed pool distribution strategies
@@ -54,6 +62,7 @@ The Token staking system features a modular architecture with clear separation o
 #### 3. Interface Architecture
 
 ##### Organized Interface Structure
+
 ```
 src/interfaces/
 ├── staking/
@@ -70,6 +79,7 @@ src/interfaces/
 ##### Advanced Data Structures
 
 **Compound StakeId System**:
+
 ```solidity
 // 256-bit stakeId: [160-bit address][96-bit counter]
 function _generateStakeId(address staker, uint32 counter) internal pure returns (bytes32) {
@@ -78,6 +88,7 @@ function _generateStakeId(address staker, uint32 counter) internal pure returns 
 ```
 
 **Extensible Flag System**:
+
 ```solidity
 struct Stake {
     uint128 amount;
@@ -293,7 +304,7 @@ sequenceDiagram
     participant ERC20
 
     User->>+StakingVault: unstake(stakeId)
-    StakingVault->>+StakingStorage: getStake(User, stakeId)
+    StakingVault->>+StakingStorage: getStake(stakeId)
     StakingStorage-->>-StakingVault: returns Stake data
     Note over StakingVault: Validates stake maturity<br/>and status
     StakingVault->>+StakingStorage: removeStake(User, stakeId)

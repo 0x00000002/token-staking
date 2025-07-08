@@ -184,10 +184,7 @@ contract TokenIntegrationTest is Test {
         bytes32 stakeId = vault.stakeFromClaim(user, STAKE_AMOUNT, DAYS_LOCK);
 
         // Verify stake was created
-        StakingStorage.Stake memory stake = stakingStorage.getStake(
-            user,
-            stakeId
-        );
+        StakingStorage.Stake memory stake = stakingStorage.getStake(stakeId);
         assertEq(stake.amount, STAKE_AMOUNT);
         assertTrue(Flags.isSet(stake.flags, StakingFlags.IS_FROM_CLAIM_BIT));
 

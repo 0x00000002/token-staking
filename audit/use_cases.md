@@ -96,7 +96,7 @@ This document defines use cases for the Token Staking System, including both the
 
 **Available Queries**:
 
-- `getStake(address staker, bytes32 stakeId)`: Get specific stake details
+- `getStake(bytes32 stakeId)`: Get specific stake details
 - `isActiveStake(address staker, bytes32 stakeId)`: Check if stake is active
 - `getStakerInfo(address staker)`: Get staker summary information
 - `getStakerBalance(address staker)`: Get current total staked balance

@@ -14,6 +14,8 @@ import {Flags} from "./lib/Flags.sol";
 import {StakingFlags} from "./StakingFlags.sol";
 import {StakingFlags} from "./StakingFlags.sol";
 
+uint16 constant EMPTY_FLAGS = 0;
+
 contract StakingVault is
     ReentrancyGuard,
     AccessControl,
@@ -88,7 +90,12 @@ contract StakingVault is
         token.safeTransferFrom(staker, address(this), amount);
 
         // Create stake in storage and get the generated ID
-        stakeId = stakingStorage.createStake(staker, amount, daysLock, 0);
+        stakeId = stakingStorage.createStake(
+            staker,
+            amount,
+            daysLock,
+            EMPTY_FLAGS
+        );
 
         emit Staked(staker, stakeId, amount, _getCurrentDay(), daysLock);
     }
@@ -101,21 +108,18 @@ contract StakingVault is
         address caller = msg.sender;
 
         // Get stake from storage
-        IStakingStorage.Stake memory _stake = stakingStorage.getStake(
-            caller,
-            stakeId
-        );
+        IStakingStorage.Stake memory _stake = stakingStorage.getStake(stakeId);
 
         // Validate stake
-        require(_stake.amount > 0, StakeNotFound(caller, stakeId));
+        require(_stake.amount > 0, StakeNotFound(stakeId));
         require(_stake.unstakeDay == 0, StakeAlreadyUnstaked(stakeId));
 
         // Check maturity
         uint16 currentDay = _getCurrentDay();
-        uint256 matureDay = uint256(_stake.stakeDay) + _stake.daysLock;
+        uint16 matureDay = _stake.stakeDay + _stake.daysLock;
         require(
-            currentDay >= matureDay,
-            StakeNotMatured(stakeId, currentDay, uint16(matureDay))
+            currentDay > matureDay,
+            StakeNotMatured(stakeId, currentDay, matureDay)
         );
 
         // Remove stake from storage
@@ -129,6 +133,8 @@ contract StakingVault is
 
     /**
      * @notice Stake tokens from claim contract
+     * @dev This function is used to stake tokens from the claim contract
+     * @dev Tokens are already transferred from the claim contract to the staking vault
      * @param staker Address of the staker
      * @param amount Amount to stake
      * @param daysLock Timelock period in days
@@ -146,7 +152,7 @@ contract StakingVault is
     {
         require(amount > 0, InvalidAmount());
 
-        uint16 flags = Flags.set(0, StakingFlags.IS_FROM_CLAIM_BIT);
+        uint16 flags = Flags.set(EMPTY_FLAGS, StakingFlags.IS_FROM_CLAIM_BIT);
 
         // Create stake in storage and get the generated ID
         stakeId = stakingStorage.createStake(staker, amount, daysLock, flags);

@@ -140,10 +140,7 @@ contract FlagsTest is Test {
         bytes32 stakeId = vault.stakeFromClaim(user, STAKE_AMOUNT, DAYS_LOCK);
 
         // Check stake flags
-        StakingStorage.Stake memory stake = stakingStorage.getStake(
-            user,
-            stakeId
-        );
+        StakingStorage.Stake memory stake = stakingStorage.getStake(stakeId);
 
         // IS_FROM_CLAIM_BIT should be set
         assertTrue(Flags.isSet(stake.flags, StakingFlags.IS_FROM_CLAIM_BIT));
@@ -161,10 +158,7 @@ contract FlagsTest is Test {
         bytes32 stakeId = vault.stake(STAKE_AMOUNT, DAYS_LOCK);
 
         // Check stake flags
-        StakingStorage.Stake memory stake = stakingStorage.getStake(
-            user,
-            stakeId
-        );
+        StakingStorage.Stake memory stake = stakingStorage.getStake(stakeId);
 
         // IS_FROM_CLAIM_BIT should not be set
         assertFalse(Flags.isSet(stake.flags, StakingFlags.IS_FROM_CLAIM_BIT));
@@ -289,11 +283,9 @@ contract FlagsTest is Test {
 
         // Query stakes after time - flags should persist correctly
         StakingStorage.Stake memory claimStake = stakingStorage.getStake(
-            user,
             stakeId1
         );
         StakingStorage.Stake memory regularStake = stakingStorage.getStake(
-            user,
             stakeId2
         );
 
@@ -318,7 +310,6 @@ contract FlagsTest is Test {
 
         for (uint256 i = 0; i < allStakeIds.length; i++) {
             StakingStorage.Stake memory stake = stakingStorage.getStake(
-                user,
                 allStakeIds[i]
             );
             if (Flags.isSet(stake.flags, StakingFlags.IS_FROM_CLAIM_BIT)) {

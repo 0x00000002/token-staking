@@ -44,23 +44,15 @@ contract EpochPoolStrategy is IEpochRewardStrategy {
         epochDurationDays = uint32(newParams[0]);
     }
 
-    function isApplicable(
-        address staker,
-        bytes32 stakeId
-    ) external view returns (bool) {
-        IStakingStorage.Stake memory stake = stakingStorage.getStake(
-            staker,
-            stakeId
-        );
+    function isApplicable(bytes32 stakeId) external view returns (bool) {
+        IStakingStorage.Stake memory stake = stakingStorage.getStake(stakeId);
         return
             stake.stakeDay >= params.startDay &&
             (params.endDay == 0 || stake.stakeDay <= params.endDay);
     }
 
     function calculateEpochReward(
-        address, // staker
-        bytes32, // stakeId
-        uint32, // epochId
+        uint32 epochId, // TODO: use it!
         uint256 userStakeWeight,
         uint256 totalStakeWeight,
         uint256 poolSize
@@ -70,15 +62,11 @@ contract EpochPoolStrategy is IEpochRewardStrategy {
     }
 
     function validateEpochParticipation(
-        address staker,
         bytes32 stakeId,
         uint32 epochStartDay,
         uint32 epochEndDay
     ) external view returns (bool) {
-        IStakingStorage.Stake memory stake = stakingStorage.getStake(
-            staker,
-            stakeId
-        );
+        IStakingStorage.Stake memory stake = stakingStorage.getStake(stakeId);
         return
             stake.stakeDay <= epochEndDay &&
             (stake.unstakeDay == 0 || stake.unstakeDay >= epochStartDay);

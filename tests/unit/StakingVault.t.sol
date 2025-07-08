@@ -94,10 +94,7 @@ contract StakingVaultTest is Test {
         );
 
         // Verify stake creation
-        StakingStorage.Stake memory stake = stakingStorage.getStake(
-            user,
-            stakeId
-        );
+        StakingStorage.Stake memory stake = stakingStorage.getStake(stakeId);
         assertEq(stake.amount, STAKE_AMOUNT);
         assertEq(stake.daysLock, DAYS_LOCK);
         assertEq(stake.unstakeDay, 0);
@@ -143,7 +140,6 @@ contract StakingVaultTest is Test {
 
         // Verify stake is marked as unstaked
         StakingStorage.Stake memory unstakedStake = stakingStorage.getStake(
-            user,
             stakeId
         );
         assertEq(unstakedStake.unstakeDay, uint16(block.timestamp / 1 days));
@@ -176,10 +172,7 @@ contract StakingVaultTest is Test {
         vm.warp(block.timestamp + (DAYS_LOCK - 1) * 1 days);
 
         // Get the stake to calculate the correct mature day
-        StakingStorage.Stake memory stake = stakingStorage.getStake(
-            user,
-            stakeId
-        );
+        StakingStorage.Stake memory stake = stakingStorage.getStake(stakeId);
         uint16 expectedMatureDay = stake.stakeDay + stake.daysLock;
 
         vm.expectRevert(
@@ -205,15 +198,15 @@ contract StakingVaultTest is Test {
         // Test that SafeERC20 is used for token operations
         uint256 balanceBefore = token.balanceOf(user);
         bytes32 stakeId = vault.stake(STAKE_AMOUNT, DAYS_LOCK);
-        
+
         // Verify SafeERC20.transferFrom was used
         assertEq(token.balanceOf(user), balanceBefore - STAKE_AMOUNT);
-        
+
         // Fast forward and test SafeERC20.transfer
         vm.warp(block.timestamp + (DAYS_LOCK + 1) * 1 days);
         uint256 balanceBeforeUnstake = token.balanceOf(user);
         vault.unstake(stakeId);
-        
+
         // Verify SafeERC20.transfer was used
         assertEq(token.balanceOf(user), balanceBeforeUnstake + STAKE_AMOUNT);
 
@@ -245,10 +238,7 @@ contract StakingVaultTest is Test {
         bytes32 stakeId = vault.stakeFromClaim(user, STAKE_AMOUNT, DAYS_LOCK);
 
         // Verify stake creation
-        StakingStorage.Stake memory stake = stakingStorage.getStake(
-            user,
-            stakeId
-        );
+        StakingStorage.Stake memory stake = stakingStorage.getStake(stakeId);
         assertEq(stake.amount, STAKE_AMOUNT);
         assertEq(stake.daysLock, DAYS_LOCK);
         assertTrue(Flags.isSet(stake.flags, StakingFlags.IS_FROM_CLAIM_BIT));
@@ -530,11 +520,12 @@ contract StakingVaultTest is Test {
 
         // Verify stake created without token transfers
         StakingStorage.Stake memory claimStake = stakingStorage.getStake(
-            user,
             claimStakeId
         );
         assertEq(claimStake.amount, STAKE_AMOUNT);
-        assertTrue(Flags.isSet(claimStake.flags, StakingFlags.IS_FROM_CLAIM_BIT));
+        assertTrue(
+            Flags.isSet(claimStake.flags, StakingFlags.IS_FROM_CLAIM_BIT)
+        );
 
         vm.stopPrank();
     }
@@ -593,11 +584,10 @@ contract StakingVaultTest is Test {
         vm.startPrank(user);
 
         bytes32 invalidStakeId = bytes32(uint256(0x123456789));
-        
+
         vm.expectRevert(
             abi.encodeWithSelector(
                 StakingErrors.StakeNotFound.selector,
-                user,
                 invalidStakeId
             )
         );
@@ -605,10 +595,4 @@ contract StakingVaultTest is Test {
 
         vm.stopPrank();
     }
-
-
-
-
-
-
 }

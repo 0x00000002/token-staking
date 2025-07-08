@@ -70,18 +70,25 @@ contract BasicIntegrationTest is Test {
 
         // Setup roles
         vm.startPrank(admin);
-        stakingStorage.grantRole(stakingStorage.CONTROLLER_ROLE(), address(vault));
-        grantedRewardStorage.grantRole(grantedRewardStorage.CONTROLLER_ROLE(), address(rewardManager));
+        stakingStorage.grantRole(
+            stakingStorage.CONTROLLER_ROLE(),
+            address(vault)
+        );
+        grantedRewardStorage.grantRole(
+            grantedRewardStorage.CONTROLLER_ROLE(),
+            address(rewardManager)
+        );
         vm.stopPrank();
 
         // Create and register strategies
-        IBaseRewardStrategy.StrategyParameters memory params = IBaseRewardStrategy.StrategyParameters({
-            name: "Test Strategy",
-            description: "Test strategy for rewards",
-            startDay: 1,
-            endDay: 365,
-            strategyType: StrategyType.IMMEDIATE
-        });
+        IBaseRewardStrategy.StrategyParameters
+            memory params = IBaseRewardStrategy.StrategyParameters({
+                name: "Test Strategy",
+                description: "Test strategy for rewards",
+                startDay: 1,
+                endDay: 365,
+                strategyType: StrategyType.IMMEDIATE
+            });
 
         linearStrategy = new LinearAPRStrategy(
             params,
@@ -157,7 +164,7 @@ contract BasicIntegrationTest is Test {
         assertTrue(claimableAmount > 0, "Should have calculated rewards");
 
         // Verify calculation matches staking behavior
-        StakingStorage.Stake memory stake = stakingStorage.getStake(user1, stakeId);
+        StakingStorage.Stake memory stake = stakingStorage.getStake(stakeId);
         assertEq(stake.amount, STAKE_AMOUNT);
 
         // Results should match staking behavior
@@ -206,8 +213,14 @@ contract BasicIntegrationTest is Test {
         assertTrue(user3Rewards > 0, "User3 should have rewards");
 
         // User2 should have ~2x user1's rewards, user3 should have ~3x
-        assertTrue(user2Rewards > user1Rewards, "User2 should have more rewards than user1");
-        assertTrue(user3Rewards > user2Rewards, "User3 should have more rewards than user2");
+        assertTrue(
+            user2Rewards > user1Rewards,
+            "User2 should have more rewards than user1"
+        );
+        assertTrue(
+            user3Rewards > user2Rewards,
+            "User3 should have more rewards than user2"
+        );
 
         // State should remain consistent
         assertEq(stakingStorage.getCurrentTotalStaked(), STAKE_AMOUNT * 6);
@@ -225,7 +238,12 @@ contract BasicIntegrationTest is Test {
         uint32 startDay = currentDay;
         uint32 endDay = startDay + 30;
 
-        uint32 epochId = epochManager.announceEpoch(startDay, endDay, 2, 1000000e18);
+        uint32 epochId = epochManager.announceEpoch(
+            startDay,
+            endDay,
+            2,
+            1000000e18
+        );
         epochManager.updateEpochStates(); // Move to ACTIVE
 
         vm.stopPrank();
@@ -258,7 +276,7 @@ contract BasicIntegrationTest is Test {
         assertTrue(claimableAmount > 0, "Should have epoch rewards");
 
         // Calculations should be correct
-        StakingStorage.Stake memory stake = stakingStorage.getStake(user1, stakeId);
+        StakingStorage.Stake memory stake = stakingStorage.getStake(stakeId);
         assertEq(stake.amount, STAKE_AMOUNT);
     }
 
@@ -304,7 +322,10 @@ contract BasicIntegrationTest is Test {
 
         // User should receive expected rewards
         assertEq(claimedAmount, claimableAmount);
-        assertEq(rewardToken.balanceOf(user1), rewardBalanceBefore + claimedAmount);
+        assertEq(
+            rewardToken.balanceOf(user1),
+            rewardBalanceBefore + claimedAmount
+        );
 
         // User can unstake after lock period
         vm.warp(block.timestamp + DAYS_LOCK * 1 days);
@@ -353,11 +374,14 @@ contract BasicIntegrationTest is Test {
 
         // Events should be emitted correctly and event data should be consistent
         // Verify data consistency across contracts
-        StakingStorage.Stake memory stake = stakingStorage.getStake(user1, stakeId);
+        StakingStorage.Stake memory stake = stakingStorage.getStake(stakeId);
         assertEq(stake.amount, STAKE_AMOUNT);
 
-        (uint256 totalGranted, uint256 totalClaimed, uint256 totalClaimable) = 
-            rewardManager.getUserRewardSummary(user1);
+        (
+            uint256 totalGranted,
+            uint256 totalClaimed,
+            uint256 totalClaimable
+        ) = rewardManager.getUserRewardSummary(user1);
         assertEq(totalClaimed, totalGranted); // All rewards claimed
         assertEq(totalClaimable, 0);
     }
@@ -381,15 +405,15 @@ contract BasicIntegrationTest is Test {
         vm.stopPrank();
 
         // Operations complete - validate consistency
-        
+
         // Total staked should equal sum of individual stakes
         uint128 totalStaked = stakingStorage.getCurrentTotalStaked();
         assertEq(totalStaked, STAKE_AMOUNT * 6);
 
         // Individual stake amounts should be correct
-        StakingStorage.Stake memory s1 = stakingStorage.getStake(user1, stake1);
-        StakingStorage.Stake memory s2 = stakingStorage.getStake(user2, stake2);
-        StakingStorage.Stake memory s3 = stakingStorage.getStake(user3, stake3);
+        StakingStorage.Stake memory s1 = stakingStorage.getStake(stake1);
+        StakingStorage.Stake memory s2 = stakingStorage.getStake(stake2);
+        StakingStorage.Stake memory s3 = stakingStorage.getStake(stake3);
 
         assertEq(s1.amount + s2.amount + s3.amount, totalStaked);
 
@@ -419,27 +443,28 @@ contract BasicIntegrationTest is Test {
 
     function test_TCI07_BasicExtensibilityValidation() public {
         // Test that existing functionality continues working when new components are added
-        
+
         // Create initial state
         vm.startPrank(user1);
         bytes32 stakeId = vault.stake(STAKE_AMOUNT, DAYS_LOCK);
         vm.stopPrank();
 
         // Verify initial functionality
-        StakingStorage.Stake memory stake = stakingStorage.getStake(user1, stakeId);
+        StakingStorage.Stake memory stake = stakingStorage.getStake(stakeId);
         assertEq(stake.amount, STAKE_AMOUNT);
 
         // Simulate adding new strategy (future component)
         vm.startPrank(admin);
-        
+
         // Create new strategy with different parameters
-        IBaseRewardStrategy.StrategyParameters memory newParams = IBaseRewardStrategy.StrategyParameters({
-            name: "New Test Strategy",
-            description: "New test strategy for rewards",
-            startDay: 100,
-            endDay: 200,
-            strategyType: StrategyType.IMMEDIATE
-        });
+        IBaseRewardStrategy.StrategyParameters
+            memory newParams = IBaseRewardStrategy.StrategyParameters({
+                name: "New Test Strategy",
+                description: "New test strategy for rewards",
+                startDay: 100,
+                endDay: 200,
+                strategyType: StrategyType.IMMEDIATE
+            });
 
         LinearAPRStrategy newStrategy = new LinearAPRStrategy(
             newParams,
@@ -459,7 +484,9 @@ contract BasicIntegrationTest is Test {
         vm.stopPrank();
 
         // Both old and new functionality should work
-        StakingStorage.Stake memory newStake = stakingStorage.getStake(user2, newStakeId);
+        StakingStorage.Stake memory newStake = stakingStorage.getStake(
+            newStakeId
+        );
         assertEq(newStake.amount, STAKE_AMOUNT * 2);
 
         // System should support both strategies
@@ -471,15 +498,21 @@ contract BasicIntegrationTest is Test {
         vm.startPrank(admin);
         uint32 fromDay = uint32((block.timestamp - 5 days) / 1 days);
         uint32 toDay = uint32(block.timestamp / 1 days);
-        
+
         // Calculate rewards with original strategy
         rewardManager.calculateImmediateRewards(1, fromDay, toDay, 0, 10);
         vm.stopPrank();
 
         uint256 user1Rewards = rewardManager.getClaimableRewards(user1);
         uint256 user2Rewards = rewardManager.getClaimableRewards(user2);
-        
-        assertTrue(user1Rewards > 0, "User1 should have rewards from original strategy");
-        assertTrue(user2Rewards > 0, "User2 should have rewards from original strategy");
+
+        assertTrue(
+            user1Rewards > 0,
+            "User1 should have rewards from original strategy"
+        );
+        assertTrue(
+            user2Rewards > 0,
+            "User2 should have rewards from original strategy"
+        );
     }
 }

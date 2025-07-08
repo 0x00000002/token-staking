@@ -88,10 +88,7 @@ contract VaultStorageIntegrationTest is Test {
         bytes32 stakeId = vault.stake(STAKE_AMOUNT, DAYS_LOCK);
 
         // Verify storage state is updated appropriately
-        StakingStorage.Stake memory stake = stakingStorage.getStake(
-            user1,
-            stakeId
-        );
+        StakingStorage.Stake memory stake = stakingStorage.getStake(stakeId);
         assertEq(stake.amount, STAKE_AMOUNT);
         assertEq(stake.daysLock, DAYS_LOCK);
         assertTrue(!Flags.isSet(stake.flags, StakingFlags.IS_FROM_CLAIM_BIT)); // Not from claim
@@ -160,7 +157,6 @@ contract VaultStorageIntegrationTest is Test {
 
         // Verify stake is properly marked as unstaked, not removed
         StakingStorage.Stake memory unstakedStake = stakingStorage.getStake(
-            user1,
             stakeId1
         );
         assertTrue(unstakedStake.unstakeDay > 0);
@@ -175,10 +171,7 @@ contract VaultStorageIntegrationTest is Test {
         bytes32 stakeId = vault.stakeFromClaim(user1, STAKE_AMOUNT, DAYS_LOCK);
 
         // Verify stake is created for correct user
-        StakingStorage.Stake memory stake = stakingStorage.getStake(
-            user1,
-            stakeId
-        );
+        StakingStorage.Stake memory stake = stakingStorage.getStake(stakeId);
         assertEq(stake.amount, STAKE_AMOUNT);
         assertTrue(Flags.isSet(stake.flags, StakingFlags.IS_FROM_CLAIM_BIT)); // From claim
 
@@ -254,10 +247,7 @@ contract VaultStorageIntegrationTest is Test {
         bytes32 stakeId = vault.stake(STAKE_AMOUNT, DAYS_LOCK);
 
         // Verify stake details match event parameters
-        StakingStorage.Stake memory stake = stakingStorage.getStake(
-            user1,
-            stakeId
-        );
+        StakingStorage.Stake memory stake = stakingStorage.getStake(stakeId);
         assertEq(stake.amount, STAKE_AMOUNT);
         assertEq(stake.daysLock, DAYS_LOCK);
         assertEq(stake.stakeDay, uint16(block.timestamp / 1 days));
@@ -423,7 +413,6 @@ contract VaultStorageIntegrationTest is Test {
         vm.expectRevert(
             abi.encodeWithSelector(
                 StakingErrors.StakeNotFound.selector,
-                user1,
                 bytes32(0)
             )
         );

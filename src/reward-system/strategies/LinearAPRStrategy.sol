@@ -44,29 +44,19 @@ contract LinearAPRStrategy is IImmediateRewardStrategy {
         annualRateBasisPoints = newParams[0];
     }
 
-    function isApplicable(
-        address staker,
-        bytes32 stakeId
-    ) external view returns (bool) {
-        IStakingStorage.Stake memory stake = stakingStorage.getStake(
-            staker,
-            stakeId
-        );
+    function isApplicable(bytes32 stakeId) external view returns (bool) {
+        IStakingStorage.Stake memory stake = stakingStorage.getStake(stakeId);
         return
             stake.stakeDay >= params.startDay &&
             (params.endDay == 0 || stake.stakeDay <= params.endDay);
     }
 
     function calculateHistoricalReward(
-        address staker,
         bytes32 stakeId,
         uint32 fromDay,
         uint32 toDay
     ) external view returns (uint256) {
-        IStakingStorage.Stake memory stake = stakingStorage.getStake(
-            staker,
-            stakeId
-        );
+        IStakingStorage.Stake memory stake = stakingStorage.getStake(stakeId);
 
         uint32 effectiveStart = stake.stakeDay > fromDay
             ? stake.stakeDay

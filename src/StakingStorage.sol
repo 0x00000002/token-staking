@@ -31,7 +31,6 @@ contract StakingStorage is IStakingStorage, AccessControl, StakingErrors {
     uint128 private _currentTotalStaked;
     uint16 private _currentDay;
 
-
     constructor(address admin, address manager, address vault) {
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(MANAGER_ROLE, manager);
@@ -73,15 +72,16 @@ contract StakingStorage is IStakingStorage, AccessControl, StakingErrors {
             _stakers[staker].lastCheckpointDay = today;
         }
 
+        StakerInfo storage _stakerInfo = _stakers[staker];
+
         // Update staker info
-        _stakers[staker].activeStakesNumber++;
-        _stakers[staker].stakesCounter++;
-        _stakers[staker].totalStaked += amount;
+        _stakerInfo.activeStakesNumber++;
+        _stakerInfo.stakesCounter++;
+        _stakerInfo.totalStaked += amount;
 
         // Update balances and checkpoints
-        _updateStakerCheckpoint(staker, today, int256(uint256(amount)));
-        _updateDailySnapshot(today, int256(uint256(amount)), 1);
-
+        _updateStakerCheckpoint(staker, today, amount, Sign.POSITIVE);
+        _updateDailySnapshot(today, Sign.POSITIVE, amount);
 
         emit Staked(staker, id, amount, today, daysLock, flags);
     }
@@ -91,11 +91,11 @@ contract StakingStorage is IStakingStorage, AccessControl, StakingErrors {
     ) external view returns (bytes32[] memory) {
         uint32 counter = _stakers[staker].stakesCounter;
         bytes32[] memory stakeIds = new bytes32[](counter);
-        
+
         for (uint32 i = 0; i < counter; i++) {
             stakeIds[i] = _generateStakeId(staker, i);
         }
-        
+
         return stakeIds;
     }
 
@@ -104,11 +104,14 @@ contract StakingStorage is IStakingStorage, AccessControl, StakingErrors {
         bytes32 id
     ) external onlyRole(CONTROLLER_ROLE) {
         Stake storage stake = _stakes[id];
-        
-        // Validate stake belongs to the staker
-        require(_getStakerFromId(id) == staker, NotStakeOwner(staker, _getStakerFromId(id)));
 
-        require(stake.amount > 0, StakeNotFound(staker, id));
+        // Validate stake belongs to the staker
+        require(
+            _getStakerFromId(id) == staker,
+            NotStakeOwner(staker, _getStakerFromId(id))
+        );
+
+        require(stake.amount > 0, StakeNotFound(id));
         require(stake.unstakeDay == 0, StakeAlreadyUnstaked(id));
 
         uint16 today = _getCurrentDay();
@@ -122,31 +125,20 @@ contract StakingStorage is IStakingStorage, AccessControl, StakingErrors {
         _stakers[staker].activeStakesNumber--;
 
         // Update balances and checkpoints
-        _updateStakerCheckpoint(staker, today, -int256(uint256(amount)));
-        _updateDailySnapshot(today, -int256(uint256(amount)), -1);
-
+        _updateStakerCheckpoint(staker, today, amount, Sign.NEGATIVE);
+        _updateDailySnapshot(today, Sign.NEGATIVE, amount);
 
         emit Unstaked(staker, id, today, amount);
     }
 
-    function getStake(
-        address staker,
-        bytes32 id
-    ) external view returns (Stake memory) {
-        Stake memory stake = _stakes[id];
-        require(stake.amount > 0, StakeNotFound(staker, id));
-        // Validate stake belongs to the staker
-        require(_getStakerFromId(id) == staker, NotStakeOwner(staker, _getStakerFromId(id)));
-        return stake;
+    function getStake(bytes32 id) external view returns (Stake memory stake) {
+        stake = _stakes[id];
+        require(stake.amount > 0, StakeNotFound(id));
     }
 
-    function isActiveStake(
-        address staker,
-        bytes32 id
-    ) external view returns (bool) {
+    function isActiveStake(bytes32 id) external view returns (bool) {
         Stake memory stake = _stakes[id];
-        // Validate stake belongs to the staker
-        require(_getStakerFromId(id) == staker, NotStakeOwner(staker, _getStakerFromId(id)));
+        require(stake.amount > 0, StakeNotFound(id));
         return stake.amount > 0 && stake.unstakeDay == 0;
     }
 
@@ -243,18 +235,18 @@ contract StakingStorage is IStakingStorage, AccessControl, StakingErrors {
     function _updateStakerCheckpoint(
         address staker,
         uint16 day,
-        int256 amountDelta
+        uint128 deltaAmount,
+        Sign deltaSign
     ) internal {
         // Get current balance
         uint128 currentBalance = _getStakerBalanceAt(staker, day);
 
         // Apply delta
-        if (amountDelta >= 0) {
-            currentBalance += uint128(uint256(amountDelta));
+        if (deltaSign == Sign.POSITIVE) {
+            currentBalance += deltaAmount;
         } else {
-            uint128 decrease = uint128(uint256(-amountDelta));
-            currentBalance = currentBalance >= decrease
-                ? currentBalance - decrease
+            currentBalance = currentBalance >= deltaAmount
+                ? currentBalance - deltaAmount
                 : 0;
         }
 
@@ -281,39 +273,35 @@ contract StakingStorage is IStakingStorage, AccessControl, StakingErrors {
 
     function _updateDailySnapshot(
         uint16 day,
-        int256 amountDelta,
-        int16 countDelta
+        Sign deltaSign,
+        uint128 deltaAmount
     ) internal {
         // If we've entered a new day, copy the previous day's snapshot.
         if (day > _currentDay) {
             _dailySnapshots[day] = _dailySnapshots[_currentDay];
             _currentDay = day;
         }
-
         DailySnapshot storage snapshot = _dailySnapshots[day];
 
-        if (amountDelta >= 0) {
-            uint128 increase = uint128(uint256(amountDelta));
-            snapshot.totalStakedAmount += increase;
-            _currentTotalStaked += increase;
-        } else {
-            uint128 decrease = uint128(uint256(-amountDelta));
-            if (snapshot.totalStakedAmount >= decrease)
-                snapshot.totalStakedAmount -= decrease;
-            else snapshot.totalStakedAmount = 0;
-            if (_currentTotalStaked >= decrease)
-                _currentTotalStaked -= decrease;
-            else _currentTotalStaked = 0;
-        }
-
-        // Update stakes count
-        if (countDelta >= 0) {
-            snapshot.totalStakesCount += uint16(countDelta);
-        } else {
-            uint16 decrease = uint16(-countDelta);
-            snapshot.totalStakesCount = snapshot.totalStakesCount >= decrease
-                ? snapshot.totalStakesCount - decrease
-                : 0;
+        // ATTN: max uint128 = 2^128 - 1 ≈ 3.4 × 10^38
+        // We assume the token has 18 decimals and its totalSupply is sensible, like 100B.
+        // So, we can safely use unchecked arithmetic operations.
+        unchecked {
+            if (deltaSign == Sign.POSITIVE) {
+                snapshot.totalStakesCount++;
+                snapshot.totalStakedAmount += deltaAmount;
+                _currentTotalStaked += deltaAmount;
+            } else {
+                snapshot.totalStakesCount--;
+                snapshot.totalStakedAmount = _safeSubtract(
+                    snapshot.totalStakedAmount,
+                    deltaAmount
+                );
+                _currentTotalStaked = _safeSubtract(
+                    _currentTotalStaked,
+                    deltaAmount
+                );
+            }
         }
     }
 
@@ -321,6 +309,7 @@ contract StakingStorage is IStakingStorage, AccessControl, StakingErrors {
         address staker,
         uint16 targetDay
     ) internal view returns (uint128) {
+        // checkpoints are days when staker had a stake
         uint16[] memory checkpoints = _stakerCheckpoints[staker];
         uint256 nCheckpoints = checkpoints.length;
 
@@ -353,5 +342,12 @@ contract StakingStorage is IStakingStorage, AccessControl, StakingErrors {
         }
 
         return _stakerBalances[staker][closest];
+    }
+
+    function _safeSubtract(
+        uint128 a,
+        uint128 b
+    ) internal pure returns (uint128) {
+        return b > a ? 0 : a - b;
     }
 }

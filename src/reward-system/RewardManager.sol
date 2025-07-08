@@ -16,7 +16,12 @@ import "../interfaces/reward/RewardEnums.sol";
 import "../interfaces/reward/IImmediateRewardStrategy.sol";
 import "../interfaces/reward/IEpochRewardStrategy.sol";
 
-contract RewardManager is AccessControl, ReentrancyGuard, Pausable, RewardErrors {
+contract RewardManager is
+    AccessControl,
+    ReentrancyGuard,
+    Pausable,
+    RewardErrors
+{
     using SafeERC20 for IERC20;
 
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
@@ -100,9 +105,8 @@ contract RewardManager is AccessControl, ReentrancyGuard, Pausable, RewardErrors
 
         for (uint256 j = 0; j < stakeIds.length; j++) {
             bytes32 stakeId = stakeIds[j];
-            if (strategy.isApplicable(staker, stakeId)) {
+            if (strategy.isApplicable(stakeId)) {
                 uint256 reward = strategy.calculateHistoricalReward(
-                    staker,
                     stakeId,
                     fromDay,
                     toDay
@@ -159,7 +163,7 @@ contract RewardManager is AccessControl, ReentrancyGuard, Pausable, RewardErrors
         EpochManager.Epoch memory epoch,
         StrategiesRegistry.RegistryEntry memory strategyEntry
     ) internal {
-        uint256 userStakeWeight = _calculateUserEpochWeight(
+        uint256 userStakeWeight = calculateUserEpochWeight(
             staker,
             epoch.startDay,
             epoch.endDay
@@ -171,10 +175,7 @@ contract RewardManager is AccessControl, ReentrancyGuard, Pausable, RewardErrors
             );
             uint256 totalEpochWeight = epoch.totalStakeWeight;
 
-            // stakeId is not used in this strategy, but we pass a non-zero value for clarity
             uint256 reward = strategy.calculateEpochReward(
-                staker,
-                bytes32(uint256(1)),
                 epoch.epochId,
                 userStakeWeight,
                 totalEpochWeight,
@@ -300,10 +301,6 @@ contract RewardManager is AccessControl, ReentrancyGuard, Pausable, RewardErrors
         return totalAmount;
     }
 
-    // ============================================================================
-    // Internal Helper Functions (moved from StakingIntegration.sol)
-    // ============================================================================
-
     /**
      * @notice Calculate user's total stake weight during an epoch period
      * @param user The user address
@@ -311,49 +308,59 @@ contract RewardManager is AccessControl, ReentrancyGuard, Pausable, RewardErrors
      * @param epochEndDay Epoch end day
      * @return totalWeight User's total weight (amount × days staked during epoch)
      */
-    function _calculateUserEpochWeight(
+    function calculateUserEpochWeight(
         address user,
         uint32 epochStartDay,
         uint32 epochEndDay
-    ) internal view returns (uint256) {
+    ) public view returns (uint256) {
         uint256 totalWeight = 0;
         bytes32[] memory stakeIds = stakingStorage.getStakerStakeIds(user);
 
         for (uint256 i = 0; i < stakeIds.length; i++) {
-            IStakingStorage.Stake memory stake = stakingStorage.getStake(user, stakeIds[i]);
-            
+            IStakingStorage.Stake memory stake = stakingStorage.getStake(
+                stakeIds[i]
+            );
+
             // Check if stake overlaps with epoch period
-            if (stake.stakeDay <= epochEndDay && (stake.unstakeDay == 0 || stake.unstakeDay >= epochStartDay)) {
-                uint32 effectiveStart = stake.stakeDay > epochStartDay ? stake.stakeDay : epochStartDay;
-                uint32 effectiveEnd = (stake.unstakeDay == 0 || stake.unstakeDay > epochEndDay) ? epochEndDay : stake.unstakeDay;
-                
+            if (
+                stake.stakeDay <= epochEndDay &&
+                (stake.unstakeDay == 0 || stake.unstakeDay >= epochStartDay)
+            ) {
+                uint32 effectiveStart = stake.stakeDay > epochStartDay
+                    ? stake.stakeDay
+                    : epochStartDay;
+                uint32 effectiveEnd = (stake.unstakeDay == 0 ||
+                    stake.unstakeDay > epochEndDay)
+                    ? epochEndDay
+                    : stake.unstakeDay;
+
                 if (effectiveEnd > effectiveStart) {
                     uint256 effectiveDays = effectiveEnd - effectiveStart;
                     totalWeight += stake.amount * effectiveDays;
                 }
             }
         }
-        
+
         return totalWeight;
     }
 
     /**
      * @notice Get the effective period a stake was active within a time range
-     * @param staker The staker address
      * @param stakeId The stake identifier
      * @param fromDay Start day of the period
      * @param toDay End day of the period
      * @return effectiveStart The effective start day
      * @return effectiveEnd The effective end day
      */
-    function _getStakeEffectivePeriod(
-        address staker,
+    function getStakeEffectivePeriod(
         bytes32 stakeId,
         uint32 fromDay,
         uint32 toDay
-    ) internal view returns (uint32 effectiveStart, uint32 effectiveEnd) {
-        IStakingStorage.Stake memory stake = stakingStorage.getStake(staker, stakeId);
+    ) public view returns (uint32 effectiveStart, uint32 effectiveEnd) {
+        IStakingStorage.Stake memory stake = stakingStorage.getStake(stakeId);
         effectiveStart = stake.stakeDay > fromDay ? stake.stakeDay : fromDay;
-        effectiveEnd = stake.unstakeDay > 0 && stake.unstakeDay < toDay ? stake.unstakeDay : toDay;
+        effectiveEnd = stake.unstakeDay > 0 && stake.unstakeDay < toDay
+            ? stake.unstakeDay
+            : toDay;
     }
 }

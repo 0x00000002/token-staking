@@ -7,6 +7,10 @@ pragma solidity ^0.8.30;
  * @notice Unified interface for consolidated staking storage
  */
 interface IStakingStorage {
+    enum Sign {
+        POSITIVE,
+        NEGATIVE
+    }
     struct Stake {
         uint128 amount;
         uint16 stakeDay;
@@ -63,15 +67,9 @@ interface IStakingStorage {
 
     function removeStake(address staker, bytes32 stakeId) external;
 
-    function getStake(
-        address staker,
-        bytes32 stakeId
-    ) external view returns (Stake memory);
+    function getStake(bytes32 stakeId) external view returns (Stake memory);
 
-    function isActiveStake(
-        address staker,
-        bytes32 stakeId
-    ) external view returns (bool);
+    function isActiveStake(bytes32 stakeId) external view returns (bool);
 
     // Staker Management
     function getStakerInfo(

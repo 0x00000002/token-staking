@@ -61,7 +61,7 @@ The script should be implemented as a class or a series of functions that perfor
   - Call `getStakerInfo(stakerAddress)` to get that user's `stakesCounter`.
   - Loop from `i = 0` to `stakesCounter - 1`.
   - Inside the loop, **locally reconstruct the `stakeId`** using the compound key formula: `const stakeId = generateCompoundId(stakerAddress, i)`. _(This helper function performs the same bitwise shifting as the on-chain `_generateStakeId` function)_.
-  - Make a free `eth_call` to `getStake(stakerAddress, stakeId)` to fetch the `Stake` struct data.
+  - Make a free `eth_call` to `getStake(stakeId)` to fetch the `Stake` struct data.
   - Push an object containing `{ staker: stakerAddress, stakeId: stakeId, ...stakeData }` into the `allStakes` array.
 - At the end of this step, `allStakes` contains the complete history of every stake ever made.
 
