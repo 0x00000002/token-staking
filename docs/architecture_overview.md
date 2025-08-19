@@ -36,28 +36,43 @@ The Token staking system features a modular architecture with clear separation o
 
 #### 2. Reward Management System
 
-##### RewardManager (Orchestration Layer)
+###### **PoolManager (`src/reward-system/PoolManager.sol`)**
 
-**Location**: `src/reward-system/RewardManager.sol`
-**Role**: Central coordinator for all reward calculations and claiming operations.
+- **Role**: **Scheduler**. This contract is the single source of truth for defining reward pool _schedules_ and _configurations_.
+- **Key Responsibilities**:
+  - **Pool Definition**: Creates pools with a `startDay` and `endDay`. Pool configurations are **immutable** once the pool has started.
+  - **Layer and Strategy Assignment**: Manages which reward strategies are assigned to a pool and on which "layer". A layer is a conceptual grouping of strategies within a pool.
+  - **Exclusivity Rules**: Defines the exclusivity rules for strategies within a pool (`NORMAL`, `EXCLUSIVE`, `SEMI_EXCLUSIVE`), which governs claim eligibility.
+  - **Weight Finalization**: Stores the final `totalStakeWeight` for a pool, set by an off-chain `CONTROLLER` role after the pool has ended. This is used for `POOL_SIZE_DEPENDENT` strategies.
 
-**Key Features**:
+##### **StrategiesRegistry (`src/reward-system/StrategiesRegistry.sol`)**
 
-- **Dual Strategy Support**: Handles both immediate (APR-style) and epoch-based (pool) rewards
-- **Gas Optimization**: Pre-calculation pattern reduces user gas costs by 30x
-- **Batch Processing**: Efficient handling of large user sets
-- **Integrated Calculations**: Direct integration with staking storage for epoch weight calculations
+- **Role**: **Directory**. A simple on-chain mapping from a strategy ID to its deployed contract address.
 
-##### Strategy System
+##### **RewardManager (`src/reward-system/RewardManager.sol`)**
 
-**Base Interfaces**:
+- **Role**: **Orchestrator**. This is the central, user-facing contract for all reward claims. It orchestrates the entire claim process, interacting with all other components of the system.
+- **Key Responsibilities**:
+  - **Claim Processing**: Handles the `claimReward` function, which is the single entry point for users.
+  - **Data Aggregation**: Fetches data from `PoolManager` (pool rules), `StakingStorage` (user stake data), and `ClaimsJournal` (claim history).
+  - **Reward Calculation**: Calls the appropriate strategy contract to calculate the user's reward based on the strategy's type.
+  - **Payout**: Manages funding for strategies and transfers the final reward amount to the user.
 
-- `IBaseRewardStrategy`: Common functionality for all strategies
-- `IImmediateRewardStrategy`: APR-style reward calculations
-- `IEpochRewardStrategy`: Fixed pool distribution strategies
+##### **ClaimsJournal (`src/reward-system/ClaimsJournal.sol`)**
 
-**Strategy Registry**: Manages strategy registration, versioning, and activation
-**Epoch Manager**: Handles epoch lifecycle (announced → active → ended → calculated → finalized)
+- **Role**: **Ledger**. Acts as the definitive, auditable ledger for all user claims. It is the single source of truth for "who has claimed what and when."
+- **Key Responsibilities**:
+  - **Direct Claim Tracking**: Records the `lastClaimDay` for a specific user's stake against a specific strategy. This is crucial for preventing double-claims.
+  - **Layer Exclusivity State**: Tracks the claims made by a user on each layer of a pool to enforce exclusivity rules.
+
+##### **IRewardStrategy (`src/interfaces/reward/IRewardStrategy.sol`)**
+
+- **Role**: **Calculation Logic Interface**. Defines a universal interface for all reward strategy contracts.
+- **Key Features**:
+  - **`StrategyType` Enum**: Strategies now self-report their type:
+    - `POOL_SIZE_INDEPENDENT`: Can be calculated at any time based on stake duration (e.g., a simple APR).
+    - `POOL_SIZE_DEPENDENT`: Requires the pool to end and the `totalStakeWeight` to be finalized before calculation (e.g., a share of a fixed reward pot).
+  - **Overloaded `calculateReward` function**: Provides two distinct functions to handle the different data requirements of each strategy type.
 
 #### 3. Interface Architecture
 
@@ -67,16 +82,15 @@ The Token staking system features a modular architecture with clear separation o
 src/interfaces/
 ├── staking/
 │   ├── IStakingStorage.sol    # Core staking data interface
-│   └── StakeFlags.sol         # Flag management utilities
+│   └── StakingErrors.sol      # Staking error definitions
 └── reward/
     ├── RewardEnums.sol        # Shared enumerations
     ├── RewardErrors.sol       # Standardized error definitions
-    ├── IBaseRewardStrategy.sol
-    ├── IImmediateRewardStrategy.sol
-    └── IEpochRewardStrategy.sol
+    ├── IRewardStrategy.sol
+    └── IRewardManager.sol     # RewardManager interface and events
 ```
 
-##### Advanced Data Structures
+##### Data Structures
 
 **Compound StakeId System**:
 
@@ -87,7 +101,7 @@ function _generateStakeId(address staker, uint32 counter) internal pure returns 
 }
 ```
 
-**Extensible Flag System**:
+**Flag System**:
 
 ```solidity
 struct Stake {
@@ -99,10 +113,11 @@ struct Stake {
 }
 ```
 
-**Checkpoint System**: Binary search optimization for historical balance queries
-**Reward Storage**: Optimized struct packing for gas-efficient reward claiming
+**Checkpoint System**: Binary search optimization for historical balance queries.
 
 ### Data Flow Architecture
+
+#### Staking Flow
 
 ```
 User Transaction
@@ -116,119 +131,62 @@ Checkpoint System (historical record)
 Event Emission (transparency)
 ```
 
-### Storage Design Patterns
+#### Reward Claim Flows
 
-#### Checkpoint System
+**1. Granted Rewards (`claimReward`)**
 
-The storage contract implements a sophisticated checkpoint mechanism that automatically records balance changes:
+```mermaid
+graph TD
+    subgraph "Actors"
+        User
+        Manager["Manager/Admin"]
+        Controller["Controller<br/>(Off-chain)"]
+    end
 
-- **Automatic Snapshots**: Every stake/unstake creates a checkpoint
-- **Binary Search Optimization**: Efficient historical balance queries
-- **Gas Efficiency**: Minimizes storage operations while maximizing data availability
-- **Historical Integrity**: Immutable record of all balance changes
+    subgraph "Core Contracts"
+        RewardManager["RewardManager<br/><i>Orchestrator</i>"]
+        PoolManager["PoolManager<br/><i>Scheduler</i>"]
+        ClaimsJournal["ClaimsJournal<br/><i>Ledger</i>"]
+        StakingStorage["StakingStorage<br/><i>Stake Data</i>"]
+        StrategiesRegistry["StrategiesRegistry<br/><i>Strategy Lookup</i>"]
+        Strategy["IRewardStrategy<br/>(Implementation)"]
+        RewardToken["RewardToken<br/>(ERC20)"]
+    end
 
-#### Stake Lifecycle Management
+    %% Configuration Flow
+    Manager -- "1. Creates Pool" --> PoolManager
+    Manager -- "2. Registers Strategy" --> StrategiesRegistry
+    Manager -- "3. Assigns Strategy to Pool" --> PoolManager
+    Manager -- "4. Funds Strategy" --> RewardManager
 
-Each stake follows a complete lifecycle with full traceability:
+    %% Calculation Flow
+    Controller -- "5. Sets Total Weight<br/>(for dependent strategies)" --> PoolManager
 
-1. **Creation**: Unique ID generation, initial checkpoint
-2. **Active Period**: Continuous balance tracking
-3. **Maturation**: Time lock validation
-4. **Completion**: Unstaking with final checkpoint
+    %% Claim Flow
+    User -- "6. claimReward(poolId, ...)" --> RewardManager
 
-### Security Architecture
+    RewardManager -- "7. Reads Pool Data" --> PoolManager
+    RewardManager -- "8. Reads Strategy Addr" --> StrategiesRegistry
+    RewardManager -- "9. Reads Stake Data" --> StakingStorage
+    RewardManager -- "10. Reads Claim History" --> ClaimsJournal
+    RewardManager -- "11. Calls calculateReward()" --> Strategy
+    Strategy -- "rewardAmount" --> RewardManager
 
-#### Multi-Layer Security
+    RewardManager -- "12. Records Claim" --> ClaimsJournal
+    RewardManager -- "13. Transfers Reward" --> RewardToken
+    RewardToken -- "Tokens" --> User
 
-- **Role-Based Access Control**: Different permission levels for different operations
-- **Reentrancy Protection**: Guards against recursive call attacks
-- **Pause Mechanism**: Emergency system shutdown capability
-- **Time Lock Enforcement**: Immutable stake duration requirements
-- **Emergency Recovery**: A feature controlled by a dedicated `MULTISIG_ROLE` to recover any ERC20 tokens accidentally sent to the contract. This prevents loss of funds while ensuring the action is controlled by a secure, multi-signature entity, separate from the general admin role.
+## Deployment Architecture (Updated)
 
-#### Separation of Concerns
-
-- **StakingVault**: Handles external interactions and security checks
-- **StakingStorage**: Manages data integrity and historical records
-- **Clear Boundaries**: Minimizes attack surface through modular design
-- **Strict Role-Based Access Control**: Sensitive operations are protected by specific roles. A `MANAGER_ROLE` handles operational pausing, while a unique `MULTISIG_ROLE` is exclusively assigned to the emergency recovery function. This granular control follows the principle of least privilege.
-- **Reentrancy Protection**: Key functions are guarded against reentrancy attacks using OpenZeppelin's `ReentrancyGuard`.
-- **Pause Capability**: The system can be paused by a `MANAGER_ROLE` in case of an emergency, halting all primary functions like staking and unstaking.
-
-## Integration Architecture
-
-### Current System Integration
-
-#### Token Integration
-
-- **IERC20 Compatibility**: Works with any standard ERC20 token
-- **SafeERC20 Usage**: Protection against non-standard token implementations
-- **Immutable Token Reference**: Prevents token switching attacks
-
-#### Claim Contract Integration
-
-- **Dedicated Role**: `CLAIM_CONTRACT_ROLE` for external claiming systems
-- **Flexible Staking**: Supports staking on behalf of users
-- **Claim Marking**: Distinguishes between direct stakes and claim-originated stakes
-
-### Future Integration Points
-
-#### Reward System Integration
-
-The current architecture is designed to seamlessly integrate with the upcoming reward system:
-
-- **Historical Data Ready**: Checkpoint system provides all necessary historical data
-- **Reward Calculator Interface**: Storage contract exposes all required data points
-- **Efficient Queries**: Optimized for reward calculation workloads
-
-#### External Protocol Integration
-
-- **Modular Design**: Easy integration with other DeFi protocols
-- **Event-Driven Architecture**: External systems can monitor via events
-- **Standardized Interfaces**: Follows common DeFi integration patterns
-
-## Technical Specifications
-
-### Smart Contract Details
-
-#### StakingVault
-
-- **Inheritance**: ReentrancyGuard, AccessControl, Pausable
-- **Key Functions**: `stake()`, `unstake()`, `stakeFromClaim()`
-- **Access Roles**: `DEFAULT_ADMIN_ROLE`, `MANAGER_ROLE`, `CLAIM_CONTRACT_ROLE`
-- **Gas Optimization**: Minimal external calls, efficient validation
-
-#### StakingStorage
-
-- **Inheritance**: AccessControl
-- **Key Functions**: `createStake()`, `removeStake()`, `getStakerBalanceAt()`
-- **Access Roles**: `DEFAULT_ADMIN_ROLE`, `MANAGER_ROLE`, `CONTROLLER_ROLE`
-- **Data Optimization**: Binary search, paginated queries, efficient mappings
-
-### Performance Characteristics
-
-#### Gas Efficiency
-
-- **Staking**: ~150,000 gas (including token transfer)
-- **Unstaking**: ~120,000 gas (including token transfer)
-- **Balance Queries**: ~15,000 gas (binary search optimization)
-- **Batch Operations**: Optimized for multiple stakes
-
-#### Scalability
-
-- **Concurrent Users**: Supports unlimited concurrent stakers
-- **Historical Data**: Efficient storage and retrieval of historical balances
-- **Large Datasets**: Paginated access to staker lists and historical data
-
-## Deployment Architecture
-
-### Contract Deployment Order
-
-1. **Token Contract**: Deploy or use existing IERC20 token
-2. **StakingStorage**: Deploy with admin, manager, and vault addresses
-3. **StakingVault**: Deploy with token and storage references
-4. **Role Configuration**: Set up access control roles
-5. **Testing**: Comprehensive integration testing
+1.  **Token Contract**: Deploy or use existing ERC20 token.
+2.  **StakingStorage**: Deploy storage contract.
+3.  **StakingVault**: Deploy vault, linking to storage.
+4.  **PoolManager**: Deploy pool manager.
+5.  **StrategiesRegistry**: Deploy strategy registry.
+6.  **RewardManager**: Deploy `RewardManager` with a **placeholder `address(0)` for `ClaimsJournal`**.
+7.  **ClaimsJournal**: Deploy `ClaimsJournal`, passing the real `RewardManager` address in the constructor.
+8.  **Finalize Connection**: Call `setClaimsJournal()` on the deployed `RewardManager` to provide it with the real `ClaimsJournal` address.
+9.  **Role Configuration**: Grant all necessary roles across contracts (e.g., give `RewardManager` the `REWARD_MANAGER_ROLE` on `ClaimsJournal`).
 
 ### Configuration Management
 
@@ -245,6 +203,7 @@ Comprehensive event emission for complete system transparency:
 - **Stake Events**: Full stake creation details
 - **Unstake Events**: Complete unstaking information
 - **Checkpoint Events**: Historical data tracking
+- **Reward Events**: Detailed events for both granted and immediate claims.
 - **Administrative Events**: Role changes and system state updates
 
 ### Analytics Support
@@ -267,58 +226,4 @@ Comprehensive event emission for complete system transparency:
 - **Modular Design**: New features can be added through additional contracts
 - **Integration Layers**: External contracts can build on top of the core system
 - **Backward Compatibility**: Future enhancements maintain compatibility
-
-## Core Workflows
-
-To understand how the system functions, here are the two primary user-facing interactions represented as sequence diagrams.
-
-### Staking Flow (`stake`)
-
-This diagram shows how a user's call to `stake` interacts across the different contracts to create a new stake.
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant StakingVault
-    participant ERC20
-    participant StakingStorage
-
-    User->>+StakingVault: stake(amount, daysLock)
-    StakingVault->>+ERC20: safeTransferFrom(User, StakingVault, amount)
-    ERC20-->>-StakingVault: (tokens transferred)
-    StakingVault->>+StakingStorage: createStake(User, stakeId, amount, daysLock, false)
-    StakingStorage-->>-StakingVault: (state updated)
-    Note over StakingVault: Emits Staked event
-    StakingVault-->>-User: returns stakeId
 ```
-
-### Unstaking Flow (`unstake`)
-
-This diagram illustrates the process of unstaking, including fetching the stake data, validation, and returning the tokens.
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant StakingVault
-    participant StakingStorage
-    participant ERC20
-
-    User->>+StakingVault: unstake(stakeId)
-    StakingVault->>+StakingStorage: getStake(stakeId)
-    StakingStorage-->>-StakingVault: returns Stake data
-    Note over StakingVault: Validates stake maturity<br/>and status
-    StakingVault->>+StakingStorage: removeStake(User, stakeId)
-    StakingStorage-->>-StakingVault: (state updated)
-    StakingVault->>+ERC20: safeTransfer(User, amount)
-    ERC20-->>-StakingVault: (tokens transferred)
-    Note over StakingVault: Emits Unstaked event
-    StakingVault-->>-User: (unstake complete)
-```
-
-## Key Features
-
-- **Flexible Staking**: Users can create multiple stakes with different time lock periods.
-
----
-
-This architecture provides a robust foundation, with careful attention to security, efficiency, and future extensibility. The separation between business logic and data storage ensures that the system can evolve while maintaining data integrity and user trust.

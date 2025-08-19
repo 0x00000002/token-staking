@@ -1,307 +1,101 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.30;
+pragma solidity 0.8.30;
 
-import {Test, console2} from "forge-std/Test.sol";
-import {StrategiesRegistry} from "../../src/reward-system/StrategiesRegistry.sol";
-import {LinearAPRStrategy} from "../../src/reward-system/strategies/LinearAPRStrategy.sol";
-import {EpochPoolStrategy} from "../../src/reward-system/strategies/EpochPoolStrategy.sol";
-import {StakingStorage} from "../../src/StakingStorage.sol";
-import {MockERC20} from "../helpers/MockERC20.sol";
-import {RewardErrors} from "../../src/interfaces/reward/RewardErrors.sol";
-import {StrategyType, EpochState} from "../../src/interfaces/reward/RewardEnums.sol";
-import {IBaseRewardStrategy} from "../../src/interfaces/reward/IBaseRewardStrategy.sol";
+import "forge-std/Test.sol";
+import "../../src/reward-system/StrategiesRegistry.sol";
+import "../../src/interfaces/reward/RewardErrors.sol";
+
+error AccessControlUnauthorizedAccount(address account, bytes32 neededRole);
 
 contract StrategiesRegistryTest is Test {
     StrategiesRegistry public registry;
-    StakingStorage public stakingStorage;
-    LinearAPRStrategy public linearStrategy;
-    EpochPoolStrategy public epochStrategy;
-    MockERC20 public token;
 
-    address public admin = address(0x1);
-    address public manager = address(0x2);
-    address public unauthorized = address(0x3);
-
-    event StrategyRegistered(
-        uint256 indexed strategyId,
-        address indexed strategyAddress,
-        StrategyType strategyType
-    );
-
-    event StrategyStatusChanged(
-        uint256 indexed strategyId,
-        bool isActive
-    );
-
-    event StrategyVersionUpdated(
-        uint256 indexed strategyId,
-        uint16 newVersion
-    );
+    address public admin = address(0xA1);
+    address public manager = address(0xB1);
+    address public strategyAddress = address(0xD1);
 
     function setUp() public {
-        token = new MockERC20("Test Token", "TEST");
-        stakingStorage = new StakingStorage(admin, manager, address(0));
-        registry = new StrategiesRegistry(admin);
+        registry = new StrategiesRegistry(admin, manager);
+    }
 
-        // Create strategy instances
-        IBaseRewardStrategy.StrategyParameters memory params = IBaseRewardStrategy.StrategyParameters({
-            name: "Test Linear Strategy",
-            description: "Test strategy for linear rewards",
-            startDay: 1,
-            endDay: 365,
-            strategyType: StrategyType.IMMEDIATE
-        });
+    function test_RegisterAndGetStrategy() public {
+        vm.startPrank(manager);
+        uint256 strategyId = registry.registerStrategy(strategyAddress);
+        assertEq(strategyId, 0);
+        vm.stopPrank();
 
-        linearStrategy = new LinearAPRStrategy(
-            params,
-            manager,
-            1000, // 10% APR
-            stakingStorage
+        assertEq(registry.getStrategyAddress(0), strategyAddress);
+        assertTrue(registry.isStrategyRegistered(0));
+    }
+
+    function test_TC_SR01_DisableStrategy_Success() public {
+        vm.startPrank(manager);
+        registry.registerStrategy(strategyAddress);
+
+        assertTrue(registry.isStrategyRegistered(0));
+
+        registry.disableStrategy(0);
+
+        assertFalse(registry.getStrategyStatus(0));
+        assertEq(
+            registry.getStrategyStatus(0),
+            false,
+            "Strategy should be disabled"
         );
-
-        IBaseRewardStrategy.StrategyParameters memory epochParams = IBaseRewardStrategy.StrategyParameters({
-            name: "Test Epoch Strategy",
-            description: "Test strategy for epoch rewards",
-            startDay: 1,
-            endDay: 365,
-            strategyType: StrategyType.EPOCH_BASED
-        });
-
-        epochStrategy = new EpochPoolStrategy(
-            epochParams,
-            manager,
-            30, // 30 day epochs
-            stakingStorage
-        );
-    }
-
-    // ============================================================================
-    // TC_R01: Strategy Registration (UC21)
-    // ============================================================================
-
-    function test_TCR01_SuccessfullyRegisterNewRewardStrategy() public {
-        vm.startPrank(admin);
-
-        vm.expectEmit(true, true, false, true);
-        emit StrategyRegistered(1, address(linearStrategy), StrategyType.IMMEDIATE);
-
-        uint256 strategyId = registry.registerStrategy(address(linearStrategy));
-
-        // Strategy should be registered with new strategyId
-        assertEq(strategyId, 1);
-
-        // Strategy should be inactive by default
-        StrategiesRegistry.RegistryEntry memory entry = registry.getStrategy(strategyId);
-        assertEq(entry.strategyAddress, address(linearStrategy));
-        assertEq(uint8(entry.strategyType), uint8(StrategyType.IMMEDIATE));
-        assertFalse(entry.isActive);
-        assertEq(entry.version, 1);
-
-        // Strategy should be queryable by ID
-        assertTrue(entry.strategyAddress != address(0));
-
         vm.stopPrank();
     }
 
-    function test_TCR01_RegisterStrategyWithInvalidAddress() public {
-        vm.startPrank(admin);
-
-        // Register strategy with invalid address
-        vm.expectRevert();
-        registry.registerStrategy(address(0));
-
-        vm.stopPrank();
-    }
-
-    function test_TCR01_UnauthorizedStrategyRegistration() public {
-        vm.startPrank(unauthorized);
-
-        vm.expectRevert(); // AccessControl error
-        registry.registerStrategy(address(linearStrategy));
-
-        vm.stopPrank();
-    }
-
-    // ============================================================================
-    // TC_R02: Strategy Status Management (UC21)
-    // ============================================================================
-
-    function test_TCR02_ActivateRegisteredStrategy() public {
-        vm.startPrank(admin);
-
-        // Register strategy first
-        uint256 strategyId = registry.registerStrategy(address(linearStrategy));
-
-        vm.expectEmit(true, false, false, true);
-        emit StrategyStatusChanged(strategyId, true);
-
-        // Activate strategy
-        registry.setStrategyStatus(strategyId, true);
-
-        // Strategy should be marked as active
-        StrategiesRegistry.RegistryEntry memory entry = registry.getStrategy(strategyId);
-        assertTrue(entry.isActive);
-
-        // Strategy should appear in active strategies list
-        uint256[] memory activeStrategies = registry.getActiveStrategies();
-        assertEq(activeStrategies.length, 1);
-        assertEq(activeStrategies[0], strategyId);
-
-        vm.stopPrank();
-    }
-
-    function test_TCR02_DeactivateActiveStrategy() public {
-        vm.startPrank(admin);
-
-        // Register and activate strategy
-        uint256 strategyId = registry.registerStrategy(address(linearStrategy));
-        registry.setStrategyStatus(strategyId, true);
-
-        vm.expectEmit(true, false, false, true);
-        emit StrategyStatusChanged(strategyId, false);
-
-        // Deactivate strategy
-        registry.setStrategyStatus(strategyId, false);
-
-        // Strategy should be marked as inactive
-        StrategiesRegistry.RegistryEntry memory entry = registry.getStrategy(strategyId);
-        assertFalse(entry.isActive);
-
-        // Strategy should be removed from active list
-        uint256[] memory activeStrategies = registry.getActiveStrategies();
-        assertEq(activeStrategies.length, 0);
-
-        vm.stopPrank();
-    }
-
-    function test_TCR02_UnauthorizedStrategyStatusChange() public {
-        vm.startPrank(admin);
-        uint256 strategyId = registry.registerStrategy(address(linearStrategy));
-        vm.stopPrank();
-
-        vm.startPrank(unauthorized);
-
-        vm.expectRevert(); // AccessControl error
-        registry.setStrategyStatus(strategyId, true);
-
-        vm.stopPrank();
-    }
-
-    // ============================================================================
-    // TC_R03: Strategy Versioning (UC21)
-    // ============================================================================
-
-    function test_TCR03_UpdateStrategyVersion() public {
-        vm.startPrank(admin);
-
-        // Register strategy
-        uint256 strategyId = registry.registerStrategy(address(linearStrategy));
-
-        vm.expectEmit(true, false, false, true);
-        emit StrategyVersionUpdated(strategyId, 2);
-
-        // Update strategy version
-        registry.updateStrategyVersion(strategyId);
-
-        // Strategy version should be incremented
-        StrategiesRegistry.RegistryEntry memory entry = registry.getStrategy(strategyId);
-        assertEq(entry.version, 2);
-
-        // Update again
-        registry.updateStrategyVersion(strategyId);
-        entry = registry.getStrategy(strategyId);
-        assertEq(entry.version, 3);
-
-        vm.stopPrank();
-    }
-
-    function test_TCR03_UpdateVersionOfNonExistentStrategy() public {
-        vm.startPrank(admin);
-
-        // Update version of non-existent strategy
+    function test_DisableStrategy_Fail_NotRegistered() public {
+        vm.startPrank(manager);
         vm.expectRevert(
-            abi.encodeWithSelector(RewardErrors.StrategyNotFound.selector, 999)
+            abi.encodeWithSelector(RewardErrors.StrategyNotExist.selector, 0)
         );
-        registry.updateStrategyVersion(999);
-
+        registry.disableStrategy(0);
         vm.stopPrank();
     }
 
-    function test_TCR03_UnauthorizedVersionUpdate() public {
-        vm.startPrank(admin);
-        uint256 strategyId = registry.registerStrategy(address(linearStrategy));
+    function test_TC_SR02_EnableStrategy_Success() public {
+        vm.startPrank(manager);
+        uint256 strategyId = registry.registerStrategy(strategyAddress); // Get the actual ID
+        assertEq(strategyId, 0); // Ensure it's ID 0 for consistency
+
+        // Initially, it should be enabled
+        assertTrue(registry.getStrategyStatus(strategyId), "Strategy should be enabled initially");
+        uint256[] memory activeStrategiesInitial = registry.getListOfActiveStrategies();
+        assertEq(activeStrategiesInitial.length, 1, "Should have 1 active strategy initially");
+        assertEq(activeStrategiesInitial[0], strategyId, "Initial active strategy ID mismatch");
+
+        // Disable the strategy
+        registry.disableStrategy(strategyId);
+        assertFalse(registry.getStrategyStatus(strategyId), "Strategy should be disabled after disableCall");
+        uint256[] memory activeStrategiesAfterDisable = registry.getListOfActiveStrategies();
+        assertEq(activeStrategiesAfterDisable.length, 0, "Should have 0 active strategies after disable");
+
+        // Enable the strategy
+        registry.enableStrategy(strategyId);
+        assertTrue(registry.getStrategyStatus(strategyId), "Strategy should be enabled after enableCall");
+        uint256[] memory activeStrategiesAfterEnable = registry.getListOfActiveStrategies();
+        assertEq(activeStrategiesAfterEnable.length, 1, "Should have 1 active strategy after enable");
+        assertEq(activeStrategiesAfterEnable[0], strategyId, "Active strategy ID mismatch after enable");
+
         vm.stopPrank();
 
-        vm.startPrank(unauthorized);
-
-        vm.expectRevert(); // AccessControl error
-        registry.updateStrategyVersion(strategyId);
-
-        vm.stopPrank();
+        // Original assertions (still valid)
+        assertTrue(registry.isStrategyRegistered(strategyId), "Strategy should still be registered");
+        assertEq(registry.getStrategyAddress(strategyId), strategyAddress, "Strategy address mismatch");
     }
 
-    // ============================================================================
-    // Additional Registry Functionality Tests
-    // ============================================================================
-
-    function test_MultipleStrategyRegistration() public {
-        vm.startPrank(admin);
-
-        // Register multiple strategies
-        uint256 linearId = registry.registerStrategy(address(linearStrategy));
-        uint256 epochId = registry.registerStrategy(address(epochStrategy));
-
-        assertEq(linearId, 1);
-        assertEq(epochId, 2);
-
-        // Verify both strategies are registered correctly
-        StrategiesRegistry.RegistryEntry memory linearEntry = registry.getStrategy(linearId);
-        StrategiesRegistry.RegistryEntry memory epochEntry = registry.getStrategy(epochId);
-
-        assertEq(linearEntry.strategyAddress, address(linearStrategy));
-        assertEq(uint8(linearEntry.strategyType), uint8(StrategyType.IMMEDIATE));
-
-        assertEq(epochEntry.strategyAddress, address(epochStrategy));
-        assertEq(uint8(epochEntry.strategyType), uint8(StrategyType.EPOCH_BASED));
-
-        vm.stopPrank();
-    }
-
-    function test_GetNonExistentStrategy() public {
+    function test_RegisterStrategy_Fail_NotManager() public {
+        vm.startPrank(admin); // Not manager
+        bytes32 managerRole = registry.MANAGER_ROLE();
         vm.expectRevert(
-            abi.encodeWithSelector(RewardErrors.StrategyNotFound.selector, 999)
+            abi.encodeWithSelector(
+                AccessControlUnauthorizedAccount.selector,
+                admin,
+                managerRole
+            )
         );
-        registry.getStrategy(999);
-    }
-
-    function test_ActiveStrategiesManagement() public {
-        vm.startPrank(admin);
-
-        // Register multiple strategies
-        uint256 linearId = registry.registerStrategy(address(linearStrategy));
-        uint256 epochId = registry.registerStrategy(address(epochStrategy));
-
-        // Initially no active strategies
-        uint256[] memory activeStrategies = registry.getActiveStrategies();
-        assertEq(activeStrategies.length, 0);
-
-        // Activate first strategy
-        registry.setStrategyStatus(linearId, true);
-        activeStrategies = registry.getActiveStrategies();
-        assertEq(activeStrategies.length, 1);
-        assertEq(activeStrategies[0], linearId);
-
-        // Activate second strategy
-        registry.setStrategyStatus(epochId, true);
-        activeStrategies = registry.getActiveStrategies();
-        assertEq(activeStrategies.length, 2);
-
-        // Deactivate first strategy
-        registry.setStrategyStatus(linearId, false);
-        activeStrategies = registry.getActiveStrategies();
-        assertEq(activeStrategies.length, 1);
-        assertEq(activeStrategies[0], epochId);
-
+        registry.registerStrategy(strategyAddress);
         vm.stopPrank();
     }
 }

@@ -1,462 +1,59 @@
-# Token Rewards System: Complete Guide
+# Token Rewards System: A Guide
 
 ## Overview
 
-The Token ecosystem features a comprehensive rewards system that works seamlessly with the staking mechanism to provide sophisticated earning opportunities for token holders. The system supports both immediate APR-style rewards and epoch-based pool distributions with optimal gas efficiency.
+The rewards system works with the staking mechanism to provide various earning opportunities for token holders. The system is designed to be flexible and transparent, supporting different types of reward strategies through a unified interface.
 
-## System Architecture
+## How Rewards Work: Pools, Layers, and Strategies
 
-### Core Components
+The rewards system is built around three core concepts:
 
-**✅ Production-Ready Components:**
+1.  **Pools**: A pool represents a reward opportunity for a specific time period. It is defined by a `startDay` and an `endDay`. All reward calculations for strategies within a pool are confined to this period. For example, a "Q3 Bonus Pool" might run from day 90 to day 180.
 
-- **Core Staking**: StakingVault + StakingStorage with compound stakeId generation
-- **Reward Management**: Complete RewardManager orchestration system
-- **Strategy Framework**: Segregated interfaces for immediate and epoch-based strategies
-- **Epoch Management**: Full lifecycle management (announced → active → ended → calculated)
-- **Historical Integration**: Seamless integration with checkpoint system for retroactive calculations
-- **Gas Optimization**: 30x reduction in user gas costs through pre-calculation patterns
+2.  **Strategies**: A strategy is a contract containing the specific logic for calculating a reward. Each strategy assigned to a pool calculates a particular type of bonus. For example, one strategy might offer a bonus for loyalty, while another gives a bonus for holding a certain amount of tokens.
 
-## Reward System Architecture
+3.  **Layers**: Within a single pool, strategies can be organized into "layers". Layers have exclusivity rules that govern how you can claim rewards from them. This allows for creating sophisticated reward structures, such as choosing between one large, exclusive bonus or several smaller, non-exclusive ones.
 
-### Core Components
+## Two Types of Reward Strategies
 
-#### 1. RewardCalculator (Future Implementation)
+While the claiming process is unified for the user, the underlying strategies fall into two categories, which affect _when_ a reward can be claimed.
 
-The brain of the rewards system that determines how much each staker should earn.
+### 1. Pool Size Independent Strategies
 
-**Key Functions:**
+These are rewards that can be calculated at any time based on your personal staking data and fixed parameters (like an APR).
 
-- Calculate rewards based on stake amount, duration, and chosen strategy
-- Apply time-based multipliers for longer lock periods
-- Handle different reward formulas for different reward pools
-- Integrate with historical staking data for accurate calculations
+- **How it Works**: The reward calculation does not depend on the actions of other stakers in the pool. The rules are self-contained. For example, a "5% APR" strategy calculates your reward based solely on your stake's duration within the pool's timeframe.
+- **Claiming**: You can claim rewards from these strategies **at any time** after the pool starts. The system tracks your `lastClaimDay` to calculate rewards accrued since your previous claim.
+- **Use Case**: Perfect for simple, continuous APR-style rewards.
 
-#### 2. RewardManager (Future Implementation)
+### 2. Pool Size Dependent Strategies
 
-Tracks all reward-related data and manages the distribution process.
+These are rewards where your share is determined by your stake's weight relative to the _total weight of all participants_ in the pool.
 
-**Key Functions:**
+- **How it Works**: Your final reward can only be calculated _after_ the pool has ended. This is because the system needs to know the `totalStakeWeight` from all eligible participants to determine your proportional share of a fixed reward pot. This total weight is calculated and set by a trusted off-chain service after the pool concludes.
+- **Claiming**: You can only claim rewards from these strategies **after the pool has ended** and been finalized. Any attempt to claim before that will fail. Since it's a one-time claim of a final share, you can only claim it once.
+- **Use Case**: Ideal for distributing a fixed number of tokens among all active participants in an epoch or promotional event.
 
-- Record reward entitlements for each stake
-- Track claimed vs. unclaimed rewards
-- Maintain historical reward data
-- Prevent double-claiming and reward manipulation
+## Unified Claiming Process
 
-#### 3. RewardStrategiesRegistry (Future Implementation)
+Regardless of the strategy type, all rewards are claimed through a single function: `claimReward(poolId, strategyId, ...)`. The `RewardManager` contract handles all the complexity, automatically checking the pool's status, the strategy's type, and your eligibility before calculating and paying out the reward.
 
-Manages multiple reward strategies that can be applied to different stakes or time periods.
+## How Staking Data Powers Rewards
 
-**Key Functions:**
+The reward system is built directly on top of the staking system's data.
 
-- Store different reward calculation formulas
-- Allow switching between strategies for new stakes
-- Maintain backward compatibility for existing stakes
-- Enable governance-driven reward parameter updates
+#### Day-Based Calculations
 
-## How Rewards Will Work
+The core of the system's fairness comes from its use of **days** as the unit for all calculations.
 
-### Basic Reward Mechanics
+- When you stake, the system records the `stakeDay`.
+- All reward calculations are based on the number of full days your stake has been active within a pool's period.
+- This ensures that rewards are predictable and not affected by the specific time of day you stake or claim.
 
-#### Time-Based Rewards
+#### Checkpoints
 
-Your rewards depend on three main factors:
+The staking system uses automatic "snapshots" called checkpoints every time you stake or unstake. This provides a secure and efficient way for the reward system to access your historical staking data, ensuring all calculations are accurate and fair.
 
-1. **Stake Amount**: How many tokens you stake
-2. **Stake Duration**: How long your tokens remain staked
-3. **Lock Period Bonus**: Additional rewards for choosing longer time locks
+## Getting Started
 
-#### Reward Calculation Formula
-
-```
-Base Reward = (Stake Amount × Reward Rate × Time Staked) / Total Staked Amount
-
-Lock Bonus = Base Reward × Lock Multiplier
-
-Total Reward = Base Reward + Lock Bonus
-```
-
-#### Example Calculation
-
-```
-Stake: 1,000 tokens
-Lock Period: 30 days
-Time Staked: 30 days
-Reward Rate: 10% annually
-Lock Multiplier: 1.2x for 30-day locks
-
-Base Reward = (1,000 × 0.10 × 30/365) / Total Pool
-Lock Bonus = Base Reward × 0.2
-Total Reward = Base Reward × 1.2
-```
-
-### Reward Strategies
-
-#### Strategy 1: Fixed APY Rewards
-
-- Simple percentage-based rewards
-- Predictable returns
-- Good for conservative stakers
-- Example: 8% annual return for any stake
-
-#### Strategy 2: Lock Period Multipliers
-
-- Higher rewards for longer commitments
-- Incentivizes network stability
-- Exponential bonus scaling
-- Example:
-  - No lock: 5% APY
-  - 30 days: 8% APY
-  - 90 days: 12% APY
-  - 365 days: 20% APY
-
-#### Strategy 3: Total Staked Bonuses
-
-- Rewards scale with your total commitment
-- Encourages larger stakes
-- Tiered bonus structure
-- Example:
-  - 0-1,000 tokens: Base rate
-  - 1,001-10,000 tokens: +10% bonus
-  - 10,001+ tokens: +25% bonus
-
-#### Strategy 4: Early Adopter Bonuses
-
-- Higher rewards for early participants
-- Decreasing bonuses over time
-- Helps bootstrap network adoption
-- Example: 2x rewards for first 6 months
-
-#### Strategy 5: Loyalty Rewards
-
-- Bonuses for consecutive staking periods
-- Rewards long-term commitment
-- Compound bonus effects
-- Example: +5% bonus for each consecutive 90-day period
-
-### Reward Periods and Distribution
-
-#### Reward Periods
-
-The system will operate on defined reward periods:
-
-- **Daily Accrual**: Rewards calculated and accrued daily
-- **Weekly Snapshots**: System takes snapshots for calculation accuracy
-- **Monthly Distribution**: Major reward distributions occur monthly
-- **Quarterly Bonuses**: Additional bonus pools distributed quarterly
-
-#### Distribution Mechanisms
-
-##### Automatic Claiming
-
-- Rewards automatically added to your stake (compound)
-- Option to enable/disable auto-compounding
-- Gas-efficient batch distributions
-
-##### Manual Claiming
-
-- Claim rewards to your wallet anytime
-- Separate reward tokens from original stake
-- Individual claim control per stake
-
-##### Batch Operations
-
-- Claim rewards from multiple stakes at once
-- Reduced transaction costs
-- Simplified user experience
-
-## Integration with Staking
-
-### How Staking Data Powers Rewards
-
-#### Understanding Checkpoints
-
-Checkpoints are a powerful feature already built into our staking system that enables accurate historical reward calculations.
-
-**What are Checkpoints?**
-of checkpoints as automatic "snapshots" that the system takes every time someone stakes or unstakes tokens. Each snapshot records:
-
-- Who had how many tokens staked
-- When the change happened
-- The total amount staked across all users
-
-**Why Checkpoints Matter for Rewards:**
-
-- **Accurate Calculations**: Determine exactly how much you had staked during any time period
-- **Fair Distribution**: Ensure rewards are proportional to your actual contribution
-- **Historical Queries**: Answer questions like "How much did Alice have staked on March 15th?"
-- **Gas Efficiency**: Avoid expensive calculations during reward distribution
-
-**Example of How Checkpoints Work:**
-
-```
-Day 1: Alice stakes 1,000  → Checkpoint created
-Day 5: Bob stakes 2,000  → Checkpoint created
-Day 10: Alice stakes 500 more → Checkpoint created
-Day 15: Bob unstakes 1,000 → Checkpoint created
-
-Reward Period: Days 1-15
-Alice's average stake: 1,000 for 10 days + 1,500 for 5 days = 1,167
-Bob's average stake: 2,000 for 10 days + 1,000 for 5 days = 1,667
-```
-
-#### Historical Data Collection
-
-The checkpoint system already collects all the data that rewards will use:
-
-- **Individual Stake History**: Track how much each user had staked at any point
-- **Global Network History**: Calculate your share of the total reward pool over time
-- **Precise Duration Tracking**: Determine exactly how long rewards should accrue
-- **Lock Period History**: Apply appropriate bonus multipliers based on lock commitments
-
-#### Stake Lifecycle Integration
-
-```
-1. User Stakes Tokens
-   ↓
-2. StakingStorage Records Stake
-   ↓
-3. RewardCalculator Begins Tracking
-   ↓
-4. Daily Reward Accrual
-   ↓
-5. User Can Claim Rewards
-   ↓
-6. User Unstakes (Rewards Stop)
-```
-
-### Reward-Enhanced Staking Flow
-
-#### Enhanced Staking Process
-
-1. **Choose Stake Amount**: How many tokens to stake
-2. **Select Lock Period**: Affects both staking and reward multipliers
-3. **Pick Reward Strategy**: Choose your reward calculation method
-4. **Set Claiming Preference**: Auto-compound or manual claiming
-5. **Stake Tokens**: Begin earning rewards immediately
-
-#### Enhanced Unstaking Process
-
-1. **Check Accumulated Rewards**: See what you've earned
-2. **Claim Outstanding Rewards**: Get your earned tokens
-3. **Unstake Original Tokens**: Withdraw your original stake
-4. **Optional**: Restake with rewards for compounding
-
-## Reward Token Economics
-
-### Reward Pool Management
-
-#### Funding Sources
-
-- **Treasury Allocation**: Dedicated portion of project treasury
-- **Transaction Fee Sharing**: Percentage of network fees
-- **Protocol Revenue**: Income from ecosystem services
-- **Community Contributions**: Additional funding from partners
-
-#### Sustainability Mechanisms
-
-- **Dynamic Reward Rates**: Adjust based on pool funding
-- **Pool Replenishment**: Regular additions to reward pools
-- **Rate Decay**: Gradual reduction to ensure long-term sustainability
-- **Emergency Controls**: Pause rewards if pools are depleted
-
-### Multi-Token Rewards
-
-#### Primary Rewards ( Tokens)
-
-- Main reward currency
-- Directly related to your stake
-- Can be restaked for compounding
-
-#### Bonus Rewards (Future Tokens)
-
-- Additional ecosystem tokens
-- Partnership rewards
-- Governance tokens
-- Special event bonuses
-
-## Advanced Reward Features
-
-### Reward Boosting
-
-#### Community Participation Boosts
-
-- Extra rewards for governance participation
-- Bonuses for ecosystem contributions
-- Social media engagement rewards
-- Educational content creation bonuses
-
-#### Partnership Integrations
-
-- Cross-protocol reward sharing
-- DeFi integration bonuses
-- Liquidity provision rewards
-- Cross-chain staking bonuses
-
-### Governance Integration
-
-#### Reward Parameter Voting
-
-- Community votes on reward rates
-- Strategy selection through governance
-- Bonus allocation decisions
-- Emergency parameter changes
-
-#### Proposal-Based Rewards
-
-- Rewards for governance proposals
-- Implementation bonuses
-- Community management rewards
-- Development contribution bonuses
-
-## Security and Risk Management
-
-### Reward Security
-
-#### Anti-Gaming Measures
-
-- Minimum stake durations for rewards
-- Withdrawal cooling periods
-- Sybil attack prevention
-- Flash loan protection
-
-#### Calculation Verification
-
-- Multiple calculation methods for verification
-- Transparent reward formulas
-- Community auditable processes
-- Regular reward audits
-
-### Risk Mitigation
-
-#### Smart Contract Risks
-
-- Gradual rollout of reward features
-- Extensive testing before deployment
-- Bug bounty programs
-- Emergency pause mechanisms
-
-#### Economic Risks
-
-- Diversified funding sources
-- Conservative reward rate setting
-- Regular economic model reviews
-- Contingency planning for market downturns
-
-## User Experience
-
-### Reward Dashboard
-
-#### Real-Time Information
-
-- Current reward rate and APY
-- Accumulated rewards per stake
-- Projected earnings
-- Historical reward performance
-
-#### Portfolio Management
-
-- Total rewards across all stakes
-- Reward claiming history
-- Tax reporting assistance
-- Performance analytics
-
-### Mobile and Web Interfaces
-
-#### Simplified Views
-
-- One-click reward claiming
-- Auto-compound toggles
-- Reward notifications
-- Gas optimization suggestions
-
-#### Advanced Features
-
-- Custom reward strategies
-- Bulk operations
-- Historical data exports
-- Tax optimization tools
-
-## Getting Started with Rewards
-
-### Preparation Checklist
-
-**Current Actions (Available Now):**
-
-- ✅ Stake your tokens with desired lock periods
-- ✅ Monitor your stakes using the existing interface
-- ✅ Understand time lock commitments
-- ✅ Track your staking performance
-
-**Future Actions (When Rewards Launch):**
-
-- 🔄 Choose your preferred reward strategy
-- 🔄 Set up claiming preferences (auto vs. manual)
-- 🔄 Configure reward notifications
-- 🔄 Begin claiming accumulated rewards
-
-### Migration from Current Stakes
-
-When the reward system launches, existing stakes will:
-
-1. **Automatically Qualify**: All existing stakes become reward-eligible
-2. **Retroactive Rewards**: Earn rewards from the launch date forward
-3. **Strategy Selection**: Choose reward strategies for existing stakes
-4. **Grandfathered Benefits**: Maintain any early adopter bonuses
-
-## Timeline and Roadmap
-
-### Phase 1: Foundation (✅ Complete)
-
-- Core staking infrastructure
-- Time lock mechanisms
-- Historical data collection
-- Security framework
-
-### Phase 2: Reward Engine (🚧 In Development)
-
-- RewardCalculator implementation
-- Basic reward strategies
-- Manual claiming functionality
-- Initial reward distributions
-
-### Phase 3: Advanced Features (📋 Planned)
-
-- Multiple reward strategies
-- Auto-compounding
-- Governance integration
-- Cross-protocol rewards
-
-### Phase 4: Ecosystem Integration (🔮 Future)
-
-- Partner protocol integration
-- Multi-token rewards
-- Advanced DeFi features
-- Layer 2 expansion
-
-## Support and Resources
-
-### Documentation
-
-- Technical specifications (for developers)
-- User tutorials and guides
-- Video walkthroughs
-- FAQ and troubleshooting
-
-### Community
-
-- Discord channels for reward discussions
-- Telegram groups for updates
-- Twitter for announcements
-- Reddit for community feedback
-
-### Developer Resources
-
-- Reward calculation APIs
-- Integration documentation
-- Testing frameworks
-- Development grants for ecosystem tools
-
----
-
-**Note**: This guide describes the complete vision for the Token rewards system. While core staking is fully operational, reward features are under active development. Join our community channels for the latest updates on reward system deployment.
+To begin earning rewards, simply stake your tokens. Your active stakes will automatically be eligible for any reward strategies that are running. Monitor the project's official announcements to learn about reward pools and strategies as they become available.

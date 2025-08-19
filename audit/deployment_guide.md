@@ -2,216 +2,152 @@
 
 ## Overview
 
-This guide covers the technical setup, testing, and deployment of the Token Staking system. This documentation is intended for developers and system administrators.
+This guide covers the technical setup and deployment process for the entire Token Staking system, including the core staking and reward management contracts.
 
-## Development Setup
+## Prerequisites
 
-### Prerequisites
+Foundry is required for testing and deployment. Ensure it is installed and up to date.
 
-We use Foundry for testing and deployment. To install Foundry:
+- Installation: `curl -L https://foundry.paradigm.xyz | bash`
+- Update: `foundryup`
 
-1. `$ curl -L https://foundry.paradigm.xyz | bash`
-2. Restart terminal
-3. `$ foundryup`
-4. `$ cargo install --git https://github.com/gakonst/foundry --bin forge --locked`
-5. `$ forge install`
+Dependencies are managed via `forge install`.
 
-More details on installation here: https://github.com/foundry-rs/foundry
+## Deployed Contracts (Mainnet)
 
-### Dependencies
+- **StakingVault**: [`0x08071901a5c4d2950888ce2b299bbd0e3087d101`](https://etherscan.io/address/0x08071901a5c4d2950888ce2b299bbd0e3087d101#code)
+- **StakingStorage**: [`0xfaa8a501cf7ffd8080b0864f2c959e8cbcf83030`](https://etherscan.io/address/0xfaa8a501cf7ffd8080b0864f2c959e8cbcf83030#code)
 
-Install required OpenZeppelin libraries:
-
-```sh
-forge install foundry-rs/forge-std
-forge install OpenZeppelin/openzeppelin-contracts
-```
-
-## Testing
-
-Tests are located in the `/tests` folder and written in Solidity.
-
-To run tests: `forge test -vvv`
+---
 
 ## Deployment Process
 
-The deployment consists of 3 main steps:
-
-1. Deploy StakingStorage.sol
-2. Deploy StakingVault.sol
-3. Grant CONTROLLER_ROLE to vault in storage contract
+Deploying the system requires a specific sequence due to dependencies between contracts. The process involves deploying contracts in stages and then configuring their roles and inter-dependencies.
 
 ### Environment Variables Setup
 
+Before deployment, set up the required environment variables.
+
 ```bash
-export RPC_URL=https://sepolia.infura.io/v3/**********
-export DEPLOYER_PK=0x42aa06dc8c320e0255df8d95494f6a7b66e10fa30919a24ad910a6c2bdbcc8ee
-export ADMIN=0xeb24a849E6C908D4166D34D7E3133B452CB627D2
-export MANAGER=0x1Fb0E85b7Ba55F0384d0E06D81DF915aeb3baca3
-export MULTISIG=0x... # Address for the separate, secure multisig wallet (granted separately after deployment)
-export TOKEN=0x....
-export REWARD_TOKEN=0x... # Reward token address (can be same as staking token)
-export ETHERSCAN_API_KEY=
+# Network and Keys
+export RPC_URL=https://sepolia.infura.io/v3/YOUR_INFURA_KEY
+export DEPLOYER_PK=YOUR_DEPLOYER_PRIVATE_KEY
+export ETHERSCAN_API_KEY=YOUR_ETHERSCAN_API_KEY
+
+# Role Addresses
+export ADMIN_ADDRESS=ADDRESS_FOR_ADMIN_ROLE # Should be a MultiSig
+export MANAGER_ADDRESS=ADDRESS_FOR_MANAGER_ROLE
+export CONTROLLER_ADDRESS=ADDRESS_FOR_CONTROLLER_ROLE # For PoolManager, an off-chain service
+export MULTISIG_ADDRESS=ADDRESS_FOR_MULTISIG_ROLE # For StakingVault emergency recovery
+
+# Token Addresses
+export STAKING_TOKEN_ADDRESS=EXISTING_STAKING_TOKEN_ADDRESS
+export REWARD_TOKEN_ADDRESS=EXISTING_REWARD_TOKEN_ADDRESS
 ```
 
-### Deployment Order
+### Deployment Order & Steps
 
-**IMPORTANT**: The complete system requires deploying components in this specific order:
+The system must be deployed in the following order. It is highly recommended to use the deployment scripts which automate this process.
 
-1. **Core Staking System** (StakingStorage + StakingVault)
-2. **Reward System** (StrategiesRegistry, EpochManager, GrantedRewardStorage, RewardManager)
-3. **Strategy Implementations** (LinearAPRStrategy, EpochPoolStrategy)
-4. **Integration Setup** (Role grants, strategy registrations)
+#### **Step 1: Deploy Core Staking Contracts**
 
-### Method 1: Using Deployment Scripts (Recommended)
+These contracts handle the fundamental logic of staking and are independent of the reward system.
 
-#### Option A: Deploy Complete System with Existing Token
+1.  **`StakingStorage.sol`**: Deployed first as it is the data layer.
+2.  **`StakingVault.sol`**: Deployed second, linking to the `StakingStorage` address in its constructor.
+
+#### **Step 2: Deploy Core Reward Contracts (Independent)**
+
+These contracts from the reward system can be deployed next as they don't have circular dependencies.
+
+3.  **`PoolManager.sol`**: Manages reward pool schedules.
+4.  **`StrategiesRegistry.sol`**: A simple registry for strategy contracts.
+
+#### **Step 3: Deploy Reward Orchestration Contracts (with Circular Dependency)**
+
+This is a critical step that resolves the dependency between `RewardManager` and `ClaimsJournal`.
+
+5.  **Deploy `RewardManager.sol`**:
+
+    - The constructor is called with all required addresses (`PoolManager`, `StrategiesRegistry`, etc.) but with **`address(0)` as the placeholder for the `ClaimsJournal` address**.
+    - This is possible because the `claimsJournal` state variable is not `immutable`.
+
+6.  **Deploy `ClaimsJournal.sol`**:
+
+    - The constructor is called with the **actual, now-existing address of the `RewardManager`**. This is valid because `RewardManager` has been deployed in the previous step.
+
+7.  **Finalize the Connection**:
+    - Call the **`setClaimsJournal(address)`** function on the deployed `RewardManager` contract.
+    - Pass the actual address of the `ClaimsJournal` contract deployed in step 6.
+    - This completes the two-way link between the contracts.
+
+#### **Step 4: Deploy Strategy Contracts**
+
+8.  Deploy all `IRewardStrategy` implementation contracts (e.g., `FullStakingStrategy.sol`, `StandardStakingStrategy.sol`).
+
+#### **Step 5: Post-Deployment Configuration (Role Grants)**
+
+After all contracts are deployed, roles must be granted to enable proper interaction.
+
+1.  **Grant `CONTROLLER_ROLE` in `StakingStorage`**:
+
+    - Recipient: `StakingVault` contract address.
+    - Purpose: Allows the vault to write stake data.
+
+2.  **Grant `REWARD_MANAGER_ROLE` in `ClaimsJournal`**:
+
+    - Recipient: `RewardManager` contract address.
+    - Purpose: Allows the reward manager to record claims in the ledger.
+
+3.  **Grant `CONTROLLER_ROLE` in `PoolManager`**:
+
+    - Recipient: Address of the off-chain service (`$CONTROLLER_ADDRESS`).
+    - Purpose: Allows the service to set final pool weights.
+
+4.  **(Optional) Register Strategies**:
+    - Call `registerStrategy()` on `StrategiesRegistry` for each deployed strategy contract. This is typically done by the `MANAGER_ROLE`.
+
+### Using Deployment Scripts (Recommended)
+
+The repository contains scripts in the `/scripts` directory to automate this entire process.
+
+- **`DeployStaking.s.sol`**: Deploys the full system, including a new staking token. Useful for testing.
+- **`DeployWithExistingToken.s.sol`**: Deploys the full system using pre-existing token addresses (recommended for production).
+- **`DeployRewardSystem.s.sol`**: Deploys only the reward system contracts, linking them to an existing, deployed staking system. Useful for upgrades or modular deployments.
+
+To run a script:
 
 ```sh
-forge script scripts/DeployCompleteSystem.s.sol:DeployCompleteSystem \
+forge script scripts/DeployRewardSystem.s.sol:DeployRewardSystem \
   --rpc-url $RPC_URL \
   --private-key $DEPLOYER_PK \
   --broadcast \
   --verify
 ```
 
-#### Option B: Deploy Core Staking Only (Legacy)
+### Post-Deployment Verification
 
-```sh
-forge script scripts/DeployStaking.s.sol:DeployStaking \
-  --rpc-url $RPC_URL \
-  --private-key $DEPLOYER_PK \
-  --broadcast \
-  --verify
-```
+After deployment, run these checks:
 
-### Method 2: Manual Deployment
-
-#### Deploy StakingStorage
-
-```sh
-forge create --broadcast ./src/StakingStorage.sol:StakingStorage --rpc-url $RPC_URL \
-  --private-key $DEPLOYER_PK \
-  --constructor-args $ADMIN $MANAGER "0x0000000000000000000000000000000000000000"
-```
-
-Set the deployed contract address: `export STAKING_STORAGE=0x...`
-
-#### Verify StakingStorage
-
-```sh
-forge verify-contract $STAKING_STORAGE \
-  src/StakingStorage.sol:StakingStorage \
-  --chain sepolia \
-  --compiler-version v0.8.30 \
-  --num-of-optimizations 200 \
-  --watch \
-  --etherscan-api-key $ETHERSCAN_API_KEY \
-  --constructor-args $(cast abi-encode "constructor(address,address,address)" $ADMIN $MANAGER "0x0000000000000000000000000000000000000000")
-```
-
-#### Deploy StakingVault
-
-```sh
-forge create --broadcast ./src/StakingVault.sol:StakingVault --rpc-url $RPC_URL \
-  --private-key $DEPLOYER_PK \
-  --constructor-args $TOKEN $STAKING_STORAGE $ADMIN $MANAGER
-```
-
-Set the vault address: `export STAKING_VAULT=0x....`
-
-#### Verify StakingVault
-
-```sh
-forge verify-contract $STAKING_VAULT \
-  src/StakingVault.sol:StakingVault \
-  --chain sepolia \
-  --compiler-version v0.8.30 \
-  --num-of-optimizations 200 \
-  --watch \
-  --etherscan-api-key $ETHERSCAN_API_KEY \
-  --constructor-args $(cast abi-encode "constructor(address,address,address,address)" $TOKEN $STAKING_STORAGE $ADMIN $MANAGER)
-```
-
-#### Setup Roles
-
-Grant CONTROLLER_ROLE to vault in storage contract:
-
-```bash
-cast send $STAKING_STORAGE "grantRole(bytes32,address)" \
-  0x7b765e0e932d348852a6f810bfa1ab891615cb53504089c3e26b8c96ca14c3d5 $STAKING_VAULT \
-  --rpc-url $RPC_URL --private-key $DEPLOYER_PK
-```
-
-Grant MULTISIG_ROLE to secure multisig wallet:
-
-```bash
-cast send $STAKING_VAULT "grantRole(bytes32,address)" \
-  0xa5a0b70b385ff7611cd3840916bd08b10829e5bf9e6637cf79dd9a427fc0e2ab $MULTISIG \
-  --rpc-url $RPC_URL --private-key $DEPLOYER_PK
-```
-
-Grant claiming contract role (if needed):
-
-```bash
-export CLAIMING=0x0b9f301DB9cDA7C8B736927eF3E745De12b81581
-cast send $STAKING_VAULT "grantRole(bytes32,address)" \
-  0x7b86e74b5b2cbeb359a5556f7b8aa26ec9fb74773c1c7b2dc16e82d368c70627 $CLAIMING \
-  --rpc-url $RPC_URL --private-key $DEPLOYER_PK
-```
-
-## Testing Deployment
-
-### Basic Functionality Test
-
-```bash
-# Check if roles are properly set
-cast call $STAKING_STORAGE "hasRole(bytes32,address)" \
-  0x7b765e0e932d348852a6f810bfa1ab891615cb53504089c3e26b8c96ca14c3d5 $STAKING_VAULT \
-  --rpc-url $RPC_URL
-
-# Should return true (0x0000000000000000000000000000000000000000000000000000000000000001)
-```
-
-### Test Staking (if you have tokens)
-
-```bash
-# First approve tokens
-cast send $TOKEN "approve(address,uint256)" $STAKING_VAULT 1000000000000000000 \
-  --rpc-url $RPC_URL --private-key $DEPLOYER_PK
-
-# Stake tokens (1 token, 30 days lock)
-cast send $STAKING_VAULT "stake(uint128,uint16)" 1000000000000000000 30 \
-  --rpc-url $RPC_URL --private-key $DEPLOYER_PK
-```
-
-## Available Deployment Scripts
-
-### 1. DeployStaking.s.sol
-
-- Deploys new token and complete staking system
-- Good for testing and new deployments
-- Automatically sets up all roles, including the `MULTISIG_ROLE`
-
-### 2. DeployWithExistingToken.s.sol
-
-- Uses existing token (like USDC)
-- Reads configuration from environment variables
-- Provides verification commands
-- Automatically sets up all roles, including the `MULTISIG_ROLE`
-- **Recommended for production deployments**
-
-### 3. DeployModularStaking.s.sol
-
-- **DEPRECATED** - Legacy script for old architecture
-- Do not use for current system
+1.  **Verify Controller Role**:
+    ```bash
+    cast call $STAKING_STORAGE_ADDRESS "hasRole(bytes32,address)" \
+      $(cast keccak "CONTROLLER_ROLE") $STAKING_VAULT_ADDRESS
+    ```
+2.  **Verify Reward Manager Role**:
+    ```bash
+    cast call $CLAIMS_JOURNAL_ADDRESS "hasRole(bytes32,address)" \
+      $(cast keccak "REWARD_MANAGER_ROLE") $REWARD_MANAGER_ADDRESS
+    ```
+3.  **Verify `claimsJournal` is set in `RewardManager`**:
+    ```bash
+    cast call $REWARD_MANAGER_ADDRESS "claimsJournal()"
+    # Should return the address of the ClaimsJournal contract, not address(0)
+    ```
 
 ## Security Notes
 
-- Always verify contract addresses before interacting
-- Keep private keys secure and never commit them to version control
-- Test thoroughly on testnets before mainnet deployment
-- Ensure proper role assignments are completed after deployment
-- Verify all contracts on Etherscan for transparency
-- Use deployment scripts instead of manual deployment when possible
-- Test basic functionality after deployment before going live
+- Always use deployment scripts for production to minimize human error.
+- Ensure role-holding addresses (`ADMIN_ADDRESS`, `MULTISIG_ADDRESS`) are secure multi-signature wallets.
+- Thoroughly test the entire deployment on a testnet before moving to mainnet.
+- Verify all deployed contracts on Etherscan for public transparency.

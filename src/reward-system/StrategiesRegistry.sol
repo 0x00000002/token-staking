@@ -1,147 +1,116 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.30;
+pragma solidity 0.8.30;
 
 import "@openzeppelin/contracts/access/AccessControl.sol";
-import "../interfaces/reward/IBaseRewardStrategy.sol";
-import "../interfaces/reward/RewardEnums.sol";
+import "../interfaces/reward/RewardErrors.sol";
+import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
-contract StrategiesRegistry is AccessControl {
-    struct RegistryEntry {
-        address strategyAddress;
-        StrategyType strategyType;
-        uint32 registeredAt;
-        uint16 version;
-        bool isActive;
-    }
+/**
+ * @title StrategiesRegistry
+ * @author @Tudmotu
+ * @notice A simple registry for mapping a strategy ID to a contract address.
+ */
+contract StrategiesRegistry is RewardErrors, AccessControl {
+    using EnumerableSet for EnumerableSet.UintSet;
+    bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
 
-    mapping(uint256 => RegistryEntry) private _strategies;
-    uint256 private _strategyCounter;
+    uint256 public nextStrategyId;
 
-    mapping(StrategyType => uint256[]) private _activeStrategiesByType;
+    mapping(uint256 id => address contractAddress) public strategies;
+    EnumerableSet.UintSet internal _enabledStrategies;
 
-    event StrategyRegistered(
+    event StrategyDisabled(
         uint256 indexed strategyId,
-        address indexed strategyAddress,
-        StrategyType strategyType
+        address indexed strategyAddress
     );
-    event StrategyStatusChanged(uint256 indexed strategyId, bool isActive);
-    event StrategyVersionUpdated(uint256 indexed strategyId, uint16 newVersion);
+    event StrategyEnabled(
+        uint256 indexed strategyId,
+        address indexed strategyAddress
+    );
 
-    error StrategyNotFound(uint256 strategyId);
-
-    constructor(address admin) {
-        _grantRole(DEFAULT_ADMIN_ROLE, admin);
+    constructor(address _admin, address _manager) {
+        _grantRole(DEFAULT_ADMIN_ROLE, _admin);
+        _grantRole(MANAGER_ROLE, _manager);
     }
 
+    /**
+     * @notice Registers a new strategy or updates an existing one.
+     * @param _strategyAddress The address of the deployed strategy contract.
+     */
     function registerStrategy(
-        address strategyAddress
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) returns (uint256 strategyId) {
-        _strategyCounter++;
-        strategyId = _strategyCounter;
-
-        IBaseRewardStrategy strategy = IBaseRewardStrategy(strategyAddress);
-        StrategyType strategyType = strategy.getStrategyType();
-
-        _strategies[strategyId] = RegistryEntry({
-            strategyAddress: strategyAddress,
-            strategyType: strategyType,
-            registeredAt: uint32(block.timestamp),
-            version: 1,
-            isActive: false
-        });
-
-        emit StrategyRegistered(strategyId, strategyAddress, strategyType);
-        return strategyId;
+        address _strategyAddress
+    ) external onlyRole(MANAGER_ROLE) returns (uint256) {
+        require(_strategyAddress != address(0), RewardErrors.InvalidAddress());
+        strategies[nextStrategyId] = _strategyAddress;
+        _enabledStrategies.add(nextStrategyId);
+        emit StrategyEnabled(nextStrategyId, _strategyAddress);
+        return nextStrategyId++;
     }
 
-    function setStrategyStatus(
-        uint256 strategyId,
-        bool isActive
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    /**
+     * @notice Removes a strategy from the registry.
+     * @param _strategyId The ID of the strategy to remove.
+     */
+    function disableStrategy(
+        uint256 _strategyId
+    ) external onlyRole(MANAGER_ROLE) {
         require(
-            _strategies[strategyId].strategyAddress != address(0),
-            StrategyNotFound(strategyId)
+            strategies[_strategyId] != address(0),
+            RewardErrors.StrategyNotExist(_strategyId)
         );
-
-        RegistryEntry storage entry = _strategies[strategyId];
-        if (entry.isActive == isActive) return; // No change
-
-        entry.isActive = isActive;
-
-        uint256[] storage activeList = _activeStrategiesByType[
-            entry.strategyType
-        ];
-        if (isActive) {
-            activeList.push(strategyId);
-        } else {
-            for (uint256 i = 0; i < activeList.length; i++) {
-                if (activeList[i] == strategyId) {
-                    activeList[i] = activeList[activeList.length - 1];
-                    activeList.pop();
-                    break;
-                }
-            }
-        }
-
-        emit StrategyStatusChanged(strategyId, isActive);
+        _enabledStrategies.remove(_strategyId);
+        emit StrategyDisabled(_strategyId, strategies[_strategyId]);
     }
 
-    function updateStrategyVersion(
-        uint256 strategyId
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function enableStrategy(
+        uint256 _strategyId
+    ) external onlyRole(MANAGER_ROLE) {
         require(
-            _strategies[strategyId].strategyAddress != address(0),
-            StrategyNotFound(strategyId)
+            strategies[_strategyId] != address(0),
+            RewardErrors.StrategyNotExist(_strategyId)
         );
-        _strategies[strategyId].version++;
-        emit StrategyVersionUpdated(
-            strategyId,
-            _strategies[strategyId].version
-        );
+        _enabledStrategies.add(_strategyId);
+        emit StrategyEnabled(_strategyId, strategies[_strategyId]);
     }
 
-    function getActiveStrategies() external view returns (uint256[] memory) {
-        uint256[] memory immediate = _activeStrategiesByType[
-            StrategyType.IMMEDIATE
-        ];
-        uint256[] memory epoch = _activeStrategiesByType[
-            StrategyType.EPOCH_BASED
-        ];
-        uint256[] memory allActive = new uint256[](
-            immediate.length + epoch.length
-        );
-        for (uint256 i = 0; i < immediate.length; i++) {
-            allActive[i] = immediate[i];
-        }
-        for (uint256 i = 0; i < epoch.length; i++) {
-            allActive[immediate.length + i] = epoch[i];
-        }
-        return allActive;
-    }
-
-    function getActiveStrategiesByType(
-        StrategyType strategyType
-    ) external view returns (uint256[] memory) {
-        return _activeStrategiesByType[strategyType];
-    }
-
-    function getStrategy(
-        uint256 strategyId
-    ) external view returns (RegistryEntry memory) {
-        require(
-            _strategies[strategyId].strategyAddress != address(0),
-            StrategyNotFound(strategyId)
-        );
-        return _strategies[strategyId];
-    }
-
+    /**
+     * @notice Gets the address of a registered strategy.
+     * @param _strategyId The ID of the strategy.
+     * @return The contract address of the strategy.
+     */
     function getStrategyAddress(
-        uint256 strategyId
+        uint256 _strategyId
     ) external view returns (address) {
-        require(
-            _strategies[strategyId].strategyAddress != address(0),
-            StrategyNotFound(strategyId)
-        );
-        return _strategies[strategyId].strategyAddress;
+        return strategies[_strategyId];
+    }
+
+    /**
+     * @notice Checks if a strategy is registered.
+     * @param _strategyId The ID of the strategy to check.
+     * @return True if the strategy is registered, false otherwise.
+     */
+    function isStrategyRegistered(
+        uint256 _strategyId
+    ) external view returns (bool) {
+        return strategies[_strategyId] != address(0);
+    }
+
+    function getStrategyStatus(
+        uint256 _strategyId
+    ) external view returns (bool) {
+        return _enabledStrategies.contains(_strategyId);
+    }
+
+    function getListOfActiveStrategies()
+        external
+        view
+        returns (uint256[] memory)
+    {
+        uint256 count = _enabledStrategies.length();
+        uint256[] memory activeStrategies = new uint256[](count);
+        for (uint256 i = 0; i < count; i++) {
+            activeStrategies[i] = _enabledStrategies.at(i);
+        }
+        return activeStrategies;
     }
 }

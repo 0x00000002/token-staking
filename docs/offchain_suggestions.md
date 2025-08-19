@@ -84,11 +84,11 @@ The script should be implemented as a class or a series of functions that perfor
 
 ### **C. On-Chain Execution Logic**
 
-Once the data is prepared, the script interacts with the `RewardManager` and `EpochManager`. The `RewardManager` function signature for `calculateEpochRewards` must be updated to accept the pre-calculated participant list.
+Once the data is prepared, the script interacts with the `RewardManager` and `PoolManager`. The `RewardManager` function signature for `calculateEpochRewards` must be updated to accept the pre-calculated participant list.
 
 **Step 5: Finalize the Epoch**
 
-- Instantiate the `EpochManager` contract.
+- Instantiate the `PoolManager` contract.
 - Call `epochManager.finalizeEpoch(EPOCH_ID, participants.length, totalEpochWeight)`.
 - This transaction must be sent first and complete successfully.
 

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
 
-import {Flags} from "../../src/lib/Flags.sol";
-import {StakingFlags} from "../../src/StakingFlags.sol";
+import "../../src/lib/Flags.sol";
+import "../../src/StakingFlags.sol";
 
 /**
  * @title TestStakeFlags

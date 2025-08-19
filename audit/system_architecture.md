@@ -2,24 +2,20 @@
 
 ## Project Intention
 
-We've developed the Token Staking system to enable users to stake their tokens with flexible time locks and earn rewards. The primary goal is to provide a secure, efficient staking mechanism with comprehensive tracking capabilities and integration with external claiming systems.
+We've developed the Token Staking system to enable users to stake their tokens with flexible time locks and earn rewards. The primary goal is to provide a secure, efficient, and modular staking mechanism with a flexible and fair rewards system.
 
 ## Key Design Decisions
 
 ### Modular Architecture
 
-We chose to implement a two-contract system for **separation of concerns** and **gas optimization**:
+The system is divided into two main subsystems with a clear separation of concerns:
 
-1. **StakingVault**: Handles staking/unstaking logic and token transfers
-2. **StakingStorage**: Manages stake state and historical tracking with checkpoint system
+1.  **Core Staking System (`StakingVault`, `StakingStorage`):** This subsystem is responsible for all logic related to staking, unstaking, and data management. It operates on a `day`-based unit of time for gas efficiency and simplicity.
+2.  **Reward System (`PoolManager`, `StrategiesRegistry`, `RewardManager`, `RewardBookkeeper`):** This subsystem handles all reward logic. It is also `day`-based to ensure fairness and consistency with the staking data. It supports two distinct reward models: pool-based "Granted Rewards" and continuous "Immediate Rewards".
 
-### Flexible Time Lock System
+### Day-Based Time Management
 
-We offer configurable time locks to accommodate different staking strategies:
-
-1. **Individual Time Locks**: Each stake can have its own time lock period (in days)
-2. **Mature Stake Validation**: Stakes cannot be unstaked until the time lock expires
-3. **Day-based Tracking**: Uses day numbers (block.timestamp / 1 days) for time lock enforcement
+The entire system operates on a `day` unit (`block.timestamp / 1 days`). This ensures that all calculations are predictable, fair, and consistent, and avoids the complexities and potential unfairness of mixing different time units.
 
 ### Access Control Architecture
 

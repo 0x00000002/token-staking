@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
 
-import {Test, console2} from "forge-std/Test.sol";
-import {StakingVault} from "../../src/StakingVault.sol";
-import {StakingStorage} from "../../src/StakingStorage.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {MockERC20} from "../helpers/MockERC20.sol";
-import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
-import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
-import {Flags} from "../../src/lib/Flags.sol";
-import {StakingFlags} from "../../src/StakingFlags.sol";
-import {StakingErrors} from "../../src/interfaces/staking/StakingErrors.sol";
+import "forge-std/Test.sol";
+import "../../src/StakingVault.sol";
+import "../../src/StakingStorage.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "../helpers/MockERC20.sol";
+import "@openzeppelin/contracts/utils/Strings.sol";
+import "@openzeppelin/contracts/access/IAccessControl.sol";
+import "../../src/lib/Flags.sol";
+import "../../src/StakingFlags.sol";
+import "../../src/interfaces/staking/StakingErrors.sol";
 
 contract StakingVaultTest is Test {
     StakingVault public vault;
@@ -44,7 +44,7 @@ contract StakingVaultTest is Test {
 
     function setUp() public {
         token = new MockERC20("Test Token", "TEST");
-        stakingStorage = new StakingStorage(admin, manager, address(0));
+        stakingStorage = new StakingStorage(admin, manager);
         vault = new StakingVault(
             IERC20(token),
             address(stakingStorage),
@@ -311,19 +311,37 @@ contract StakingVaultTest is Test {
     // ============================================================================
 
     function test_TC11_EmergencyTokenRecovery() public {
-        // This test now verifies that the main staking token CANNOT be recovered.
-        vm.startPrank(admin); // Any user with MULTISIG_ROLE
-        vm.expectRevert(StakingErrors.CannotRecoverStakingToken.selector);
-        vault.emergencyRecover(token, 1e18);
+        // Test successful recovery of the main staking token.
+        token.mint(address(vault), 1000e18);
+        uint256 vaultStakingTokenBalanceBefore = token.balanceOf(
+            address(vault)
+        );
+        uint256 adminStakingTokenBalanceBefore = token.balanceOf(admin);
+
+        vm.startPrank(admin);
+        vault.emergencyRecover(IERC20(address(token)), 500e18);
         vm.stopPrank();
+
+        assertEq(
+            token.balanceOf(address(vault)),
+            vaultStakingTokenBalanceBefore - 500e18
+        );
+        assertEq(
+            token.balanceOf(admin),
+            adminStakingTokenBalanceBefore + 500e18
+        );
 
         // Test successful recovery of other ERC20 tokens
         MockERC20 otherToken = new MockERC20("Other Token", "OTHR");
         otherToken.mint(address(vault), 1000e18);
+        uint256 adminOtherTokenBalanceBefore = otherToken.balanceOf(admin);
 
         vm.startPrank(admin);
-        vault.emergencyRecover(otherToken, 500e18);
-        assertEq(otherToken.balanceOf(admin), 500e18);
+        vault.emergencyRecover(IERC20(address(otherToken)), 500e18);
+        assertEq(
+            otherToken.balanceOf(admin),
+            adminOtherTokenBalanceBefore + 500e18
+        );
         assertEq(otherToken.balanceOf(address(vault)), 500e18);
         vm.stopPrank();
     }

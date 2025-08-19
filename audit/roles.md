@@ -1,48 +1,54 @@
-# Access Control System: Developer Notes for Auditors
+# Access Control System: An Auditor's Guide
 
 ## Our Approach to Access Control
 
-The Token Staking system implements a carefully designed access control architecture using OpenZeppelin's AccessControl pattern. We've structured roles across two main contracts - StakingVault and StakingStorage - to achieve separation of concerns and granular permission management.
+The Token Staking system implements a carefully designed access control architecture using OpenZeppelin's `AccessControl` pattern. We've structured roles across the entire system — from core staking to reward management — to achieve a clear separation of concerns and granular permission management.
 
 ## System Architecture Overview
 
-Our role system is distributed across two contracts:
+Our role system is distributed across five key contracts:
 
-1. **StakingVault**: Main user interface and business logic
-2. **StakingStorage**: Data persistence and historical tracking
+1.  **Staking Core**: `StakingVault` (business logic) and `StakingStorage` (data persistence).
+2.  **Reward System**: `PoolManager` (scheduling), `RewardManager` (orchestration), and `ClaimsJournal` (ledger).
 
-Each contract maintains its own set of roles while working together through the CONTROLLER_ROLE mechanism.
+Each contract maintains its own set of roles, while integration is managed through specific, tightly-scoped role grants between them.
 
 ## Role Architecture and Rationale
 
-### DEFAULT_ADMIN_ROLE (`0x00`)
+### `DEFAULT_ADMIN_ROLE` (`0x00`)
 
-**Available in:** Both StakingVault and StakingStorage
+- **Available in**: All ownable contracts (`StakingVault`, `StakingStorage`, `PoolManager`, `RewardManager`, `ClaimsJournal`, etc.).
+- **Purpose**: This is the "root" role, responsible for assigning and revoking all other roles. It has no direct operational capabilities.
+- **Rationale**: Isolating role management from operational functions ensures that a compromise of an operational key does not immediately grant an attacker control over permissions. In production, this role must be held by a secure multi-signature wallet.
 
-This role serves as the role manager, responsible for assigning other roles and critical system configurations. In production, this role will be assigned to a secure multi-signature wallet controlled by our core team.
+### `MANAGER_ROLE` (`keccak256("MANAGER_ROLE")`)
 
-**StakingVault Permissions:**
+- **Available in**: `StakingVault`, `PoolManager`, `RewardManager`.
+- **Purpose**: The primary role for day-to-day operational management of the system.
+- **Permissions & Rationale**:
+  - **In `StakingVault`**: Can `pause()` and `unpause()` staking operations.
+  - **In `PoolManager`**: Can `upsertPool()` and `assignStrategyToPool()`. This allows the operations team to schedule new reward opportunities without needing admin rights.
+  - **In `RewardManager`**: Can `fundStrategy()` by depositing reward tokens into the contract. This is a critical operational task for enabling reward payouts.
 
-**Design rationale:** We've intentionally limited this role to role management rather than day-to-day operations or emergency recovery. This ensures that even if the admin role is compromised, the attacker cannot directly manipulate stakes without first granting themselves additional roles (which should be noticeable through events).
+### `CONTROLLER_ROLE` (`keccak256("CONTROLLER_ROLE")`)
 
-### MANAGER_ROLE (`keccak256("MANAGER_ROLE")`)
+- **Available in**: `StakingStorage`, `PoolManager`.
+- **Purpose**: A role designed to be held by a contract or an automated off-chain service, not a human. It grants permission to write critical data.
+- **Permissions & Rationale**:
+  - **In `StakingStorage`**: Grants `StakingVault` permission to `createStake()` and `removeStake()`. This creates a secure "data tunnel" where only the logic contract can alter the state of the storage contract.
+  - **In `PoolManager`**: Grants permission to call `setPoolTotalStakeWeight()`. This is intended for a trusted off-chain service that calculates the final weight of all participants after a `POOL_SIZE_DEPENDENT` pool has ended. This prevents on-chain manipulation and saves gas.
 
-**Available in:** Both StakingVault and StakingStorage
+### `REWARD_MANAGER_ROLE` (`keccak256("REWARD_MANAGER_ROLE")`)
 
-The manager role handles day-to-day operational adjustments and system maintenance.
+- **Available in**: `ClaimsJournal` only.
+- **Purpose**: A highly specialized role that grants permission to write to the claims ledger.
+- **Permissions & Rationale**:
+  - This role is granted **exclusively to the `RewardManager` contract**.
+  - When a user successfully claims a reward via `RewardManager`, the `RewardManager` calls `ClaimsJournal.recordClaim()` to log the transaction. This ensures that the claim history is an immutable, trustworthy record that can only be appended to by the main reward orchestration contract, preventing fraudulent claim entries.
 
-**StakingVault Permissions:**
+### `MULTISIG_ROLE` (`keccak256("MULTISIG_ROLE")`)
 
-```solidity
-function pause() external onlyRole(MANAGER_ROLE)
-function unpause() external onlyRole(MANAGER_ROLE)
-```
-
-**Design rationale:** We separated these functions into a dedicated role to allow our operations team to make routine adjustments without requiring admin intervention. This reduces friction for necessary operational changes while maintaining security boundaries.
-
-### MULTISIG_ROLE (`keccak256("MULTISIG_ROLE")`)
-
-**Available in:** StakingVault only
+**Available in:** `StakingVault` only
 
 This is a highly specialized and powerful role intended exclusively for a secure, multi-signature wallet. Its sole purpose is to execute the emergency token recovery, providing a safeguard against accidentally sent funds.
 
@@ -54,7 +60,7 @@ function emergencyRecover(IERC20 token_, uint256 amount) external onlyRole(MULTI
 
 **Design rationale:** We have isolated the `emergencyRecover` function from the `DEFAULT_ADMIN_ROLE` to enforce the principle of least privilege. By requiring a unique, hardware-secured role, we significantly reduce the risk associated with the compromise of any single administrative or operational key. This ensures that the recovery of funds is a deliberate, multi-party action.
 
-### CONTROLLER_ROLE (`keccak256("CONTROLLER_ROLE")`)
+### `CONTROLLER_ROLE` (`keccak256("CONTROLLER_ROLE")`)
 
 **Available in:** StakingStorage only
 
@@ -69,9 +75,9 @@ function removeStake(bytes32 id) external onlyRole(CONTROLLER_ROLE)
 
 **Design rationale:** We've created a dedicated controller role to maintain strict boundaries between the vault (business logic) and storage (data persistence). Only the designated controller (StakingVault) can modify stake records, preventing unauthorized state manipulation while enabling clean separation of concerns.
 
-### CLAIM_CONTRACT_ROLE (`keccak256("CLAIM_CONTRACT_ROLE")`)
+### `CLAIM_CONTRACT_ROLE` (`keccak256("CLAIM_CONTRACT_ROLE")`)
 
-**Available in:** StakingVault only
+**Available in:** `StakingVault` only
 
 This role enables external claiming contracts to stake on behalf of users through our integration system.
 
@@ -87,11 +93,14 @@ function stakeFromClaim(address staker, uint128 amount, uint16 daysLock) externa
 
 In our production environment:
 
-1. **DEFAULT_ADMIN_ROLE**: Assigned to a secure multisig wallet (core team members)
-2. **MANAGER_ROLE**: Assigned to a dedicated operations wallet with enhanced security
-3. **MULTISIG_ROLE**: Assigned to a separate, highly secure multisig wallet, distinct from the admin multisig.
-4. **CONTROLLER_ROLE**: Assigned exclusively to the StakingVault contract address
-5. **CLAIM_CONTRACT_ROLE**: Assigned to authorized external claiming contracts
+1.  **`DEFAULT_ADMIN_ROLE`**: Assigned to a secure multisig wallet (core team).
+2.  **`MANAGER_ROLE`**: Assigned to a dedicated operations wallet.
+3.  **`MULTISIG_ROLE`**: Assigned to a separate, highly secure multisig wallet.
+4.  **`CONTROLLER_ROLE`**:
+    - In `StakingStorage`, granted to the `StakingVault` contract address.
+    - In `PoolManager`, granted to the trusted off-chain service address.
+5.  **`REWARD_MANAGER_ROLE`**: In `ClaimsJournal`, granted to the `RewardManager` contract address.
+6.  **`CLAIM_CONTRACT_ROLE`**: Assigned to authorized external claiming contracts.
 
 ## Contract Integration and Setup
 
